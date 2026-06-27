@@ -241,6 +241,7 @@ export function exportInvoiceToPdf(invoice: GeneratedInvoice): void {
     },
     margin: { left: margin, right: margin },
     showHead: "everyPage",
+    showFoot: "lastPage",
   });
 
   const finalY =
