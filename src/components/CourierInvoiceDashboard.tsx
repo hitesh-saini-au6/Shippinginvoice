@@ -46,6 +46,7 @@ import { getInvoiceFilename } from "@/utils/invoiceFilename";
 import { applyPickupDateRangeToForm } from "@/utils/shipmentDates";
 import { formatWeightGrams } from "@/utils/weight";
 import type {
+  BuyerDetails,
   DelhiveryShipment,
   GeneratedInvoice,
   PincodeMaster,
@@ -61,6 +62,11 @@ const formSchema = z
     supplierGstin: z.string().min(1, "Supplier GST is required"),
     buyerName: z.string().min(1, "Buyer name is required"),
     buyerGstin: z.string().min(1, "Buyer GST is required"),
+    buyerAddressLine: z.string().min(1, "Buyer address is required"),
+    buyerCity: z.string().min(1, "Buyer city is required"),
+    buyerPincode: z.string().min(1, "Buyer pincode is required"),
+    buyerState: z.string().min(1, "Buyer state is required"),
+    buyerStateCode: z.string().min(1, "Buyer state code is required"),
   })
   .refine((data) => new Date(data.billingFrom) <= new Date(data.billingTo), {
     message: "Billing from date must be on or before billing to date",
@@ -69,12 +75,43 @@ const formSchema = z
 
 type FormValues = z.infer<typeof formSchema>;
 
-function getClientDefaults(clientId: string) {
+function getClientDefaults(clientId: string): BuyerDetails {
   const client = clients.find((item) => item.id === clientId) ?? clients[0];
   return {
-    buyerName: client?.name ?? "",
-    buyerGstin: client?.gstin ?? "",
+    name: client?.name ?? "",
+    gstin: client?.gstin ?? "",
+    addressLine: client?.addressLine ?? "",
+    city: client?.city ?? "",
+    pincode: client?.pincode ?? "",
+    state: client?.state ?? "",
+    stateCode: client?.stateCode ?? "",
   };
+}
+
+function applyBuyerDefaults(
+  defaults: BuyerDetails,
+  setValue: (
+    field: keyof Pick<
+      FormValues,
+      | "buyerName"
+      | "buyerGstin"
+      | "buyerAddressLine"
+      | "buyerCity"
+      | "buyerPincode"
+      | "buyerState"
+      | "buyerStateCode"
+    >,
+    value: string,
+    options?: { shouldValidate?: boolean },
+  ) => void,
+): void {
+  setValue("buyerName", defaults.name, { shouldValidate: true });
+  setValue("buyerGstin", defaults.gstin, { shouldValidate: true });
+  setValue("buyerAddressLine", defaults.addressLine, { shouldValidate: true });
+  setValue("buyerCity", defaults.city, { shouldValidate: true });
+  setValue("buyerPincode", defaults.pincode, { shouldValidate: true });
+  setValue("buyerState", defaults.state, { shouldValidate: true });
+  setValue("buyerStateCode", defaults.stateCode, { shouldValidate: true });
 }
 
 export function CourierInvoiceDashboard() {
@@ -102,16 +139,24 @@ export function CourierInvoiceDashboard() {
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(formSchema),
-    defaultValues: {
-      clientId: clients[0]?.id ?? "",
-      billingFrom: "",
-      billingTo: "",
-      invoiceNumber: "",
-      supplierName: businessDetails.name,
-      supplierGstin: businessDetails.gstin,
-      buyerName: getClientDefaults(clients[0]?.id ?? "").buyerName,
-      buyerGstin: getClientDefaults(clients[0]?.id ?? "").buyerGstin,
-    },
+    defaultValues: (() => {
+      const buyerDefaults = getClientDefaults(clients[0]?.id ?? "");
+      return {
+        clientId: clients[0]?.id ?? "",
+        billingFrom: "",
+        billingTo: "",
+        invoiceNumber: "",
+        supplierName: businessDetails.name,
+        supplierGstin: businessDetails.gstin,
+        buyerName: buyerDefaults.name,
+        buyerGstin: buyerDefaults.gstin,
+        buyerAddressLine: buyerDefaults.addressLine,
+        buyerCity: buyerDefaults.city,
+        buyerPincode: buyerDefaults.pincode,
+        buyerState: buyerDefaults.state,
+        buyerStateCode: buyerDefaults.stateCode,
+      };
+    })(),
   });
 
   const clientId = watch("clientId");
@@ -119,9 +164,7 @@ export function CourierInvoiceDashboard() {
   const billingTo = watch("billingTo");
 
   useEffect(() => {
-    const defaults = getClientDefaults(clientId);
-    setValue("buyerName", defaults.buyerName, { shouldValidate: true });
-    setValue("buyerGstin", defaults.buyerGstin, { shouldValidate: true });
+    applyBuyerDefaults(getClientDefaults(clientId), setValue);
   }, [clientId, setValue]);
 
   useEffect(() => {
@@ -173,9 +216,7 @@ export function CourierInvoiceDashboard() {
         setValue("invoiceNumber", "", { shouldValidate: true });
         setValue("supplierName", businessDetails.name, { shouldValidate: true });
         setValue("supplierGstin", businessDetails.gstin, { shouldValidate: true });
-        const buyerDefaults = getClientDefaults(clientId);
-        setValue("buyerName", buyerDefaults.buyerName, { shouldValidate: true });
-        setValue("buyerGstin", buyerDefaults.buyerGstin, { shouldValidate: true });
+        applyBuyerDefaults(getClientDefaults(clientId), setValue);
 
         setUploadMessage(
           `Loaded ${result.shipments.length} shipments from ${file.name}.${dateRange ? ` Billing dates set to ${dateRange.from} → ${dateRange.to} (pickup date range).` : ""} Now click Generate Invoice.`,
@@ -233,6 +274,11 @@ export function CourierInvoiceDashboard() {
         supplierGstin: values.supplierGstin,
         buyerName: values.buyerName,
         buyerGstin: values.buyerGstin,
+        buyerAddressLine: values.buyerAddressLine,
+        buyerCity: values.buyerCity,
+        buyerPincode: values.buyerPincode,
+        buyerState: values.buyerState,
+        buyerStateCode: values.buyerStateCode,
       },
     );
 
@@ -398,7 +444,7 @@ export function CourierInvoiceDashboard() {
           </div>
 
           <div className="space-y-2">
-            <Label>Client</Label>
+            <Label>Client preset</Label>
             <Select
               value={clientId}
               onValueChange={(value) => {
@@ -408,7 +454,7 @@ export function CourierInvoiceDashboard() {
               }}
             >
               <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select client" />
+                <SelectValue placeholder="Select client preset" />
               </SelectTrigger>
               <SelectContent>
                 {clients.map((client) => (
@@ -418,6 +464,10 @@ export function CourierInvoiceDashboard() {
                 ))}
               </SelectContent>
             </Select>
+            <p className="text-xs text-muted-foreground">
+              Pre-fills buyer name, GST, and address. You can edit all fields
+              below after upload.
+            </p>
           </div>
 
           <div className="space-y-2">
@@ -564,6 +614,76 @@ export function CourierInvoiceDashboard() {
                   {errors.buyerGstin && (
                     <p className="text-sm text-destructive">
                       {errors.buyerGstin.message}
+                    </p>
+                  )}
+                </div>
+
+                <div className="space-y-2 md:col-span-2">
+                  <Label htmlFor="buyer-address">Buyer Address</Label>
+                  <Input
+                    id="buyer-address"
+                    placeholder="Street / area address"
+                    {...register("buyerAddressLine")}
+                  />
+                  {errors.buyerAddressLine && (
+                    <p className="text-sm text-destructive">
+                      {errors.buyerAddressLine.message}
+                    </p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="buyer-city">City</Label>
+                  <Input
+                    id="buyer-city"
+                    placeholder="e.g. Jaipur"
+                    {...register("buyerCity")}
+                  />
+                  {errors.buyerCity && (
+                    <p className="text-sm text-destructive">
+                      {errors.buyerCity.message}
+                    </p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="buyer-pincode">Pincode</Label>
+                  <Input
+                    id="buyer-pincode"
+                    placeholder="e.g. 302029"
+                    {...register("buyerPincode")}
+                  />
+                  {errors.buyerPincode && (
+                    <p className="text-sm text-destructive">
+                      {errors.buyerPincode.message}
+                    </p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="buyer-state">State</Label>
+                  <Input
+                    id="buyer-state"
+                    placeholder="e.g. Rajasthan"
+                    {...register("buyerState")}
+                  />
+                  {errors.buyerState && (
+                    <p className="text-sm text-destructive">
+                      {errors.buyerState.message}
+                    </p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="buyer-state-code">State Code</Label>
+                  <Input
+                    id="buyer-state-code"
+                    placeholder="e.g. 08"
+                    {...register("buyerStateCode")}
+                  />
+                  {errors.buyerStateCode && (
+                    <p className="text-sm text-destructive">
+                      {errors.buyerStateCode.message}
                     </p>
                   )}
                 </div>

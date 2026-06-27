@@ -54,6 +54,16 @@ export interface InvoiceSummary {
   gst: GstBreakdown;
 }
 
+export interface BuyerDetails {
+  name: string;
+  gstin: string;
+  addressLine: string;
+  city: string;
+  pincode: string;
+  state: string;
+  stateCode: string;
+}
+
 export interface GeneratedInvoice {
   clientId: string;
   clientName: string;
@@ -61,6 +71,11 @@ export interface GeneratedInvoice {
   supplierGstin: string;
   buyerName: string;
   buyerGstin: string;
+  buyerAddressLine: string;
+  buyerCity: string;
+  buyerPincode: string;
+  buyerState: string;
+  buyerStateCode: string;
   billingFrom: Date;
   billingTo: Date;
   invoiceDate: Date;
@@ -75,6 +90,11 @@ export interface InvoiceBuildOptions {
   supplierGstin: string;
   buyerName: string;
   buyerGstin: string;
+  buyerAddressLine: string;
+  buyerCity: string;
+  buyerPincode: string;
+  buyerState: string;
+  buyerStateCode: string;
   invoiceDate?: Date;
 }
 

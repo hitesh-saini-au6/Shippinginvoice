@@ -2,7 +2,6 @@ import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import {
   businessDetails,
-  clients,
   paymentSettings,
   statutoryGuidelines,
 } from "@/config/invoiceSettings";
@@ -135,8 +134,6 @@ export function exportInvoiceToPdf(
   options: PdfExportOptions = {},
 ): void {
   const highlightIssueRows = options.highlightIssueRows ?? false;
-  const client =
-    clients.find((item) => item.id === invoice.clientId) ?? clients[0];
   const { summary } = invoice;
 
   const doc = new jsPDF({
@@ -194,10 +191,10 @@ export function exportInvoiceToPdf(
   doc.text(invoice.buyerName, margin, y);
   y += 3;
   doc.setFont("helvetica", "normal");
-  doc.text(client.addressLine, margin, y);
+  doc.text(invoice.buyerAddressLine, margin, y);
   y += 3;
   doc.text(
-    `${client.city} - ${client.pincode} ${client.state}. India.`,
+    `${invoice.buyerCity} - ${invoice.buyerPincode} ${invoice.buyerState}. India.`,
     margin,
     y,
   );

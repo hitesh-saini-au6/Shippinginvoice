@@ -1,7 +1,6 @@
 import ExcelJS from "exceljs";
 import {
   businessDetails,
-  clients,
   gstSettings,
   paymentSettings,
   statutoryGuidelines,
@@ -77,8 +76,6 @@ function buildHeaderSection(
   sheet: ExcelJS.Worksheet,
   invoice: GeneratedInvoice,
 ): number {
-  const client =
-    clients.find((item) => item.id === invoice.clientId) ?? clients[0];
   const { summary } = invoice;
 
   sheet.columns = [
@@ -157,19 +154,19 @@ function buildHeaderSection(
 
   setCell(sheet, 10, 1, "Buyer", { bold: true });
   setCell(sheet, 11, 1, invoice.buyerName, { bold: true });
-  setCell(sheet, 12, 1, client.addressLine);
+  setCell(sheet, 12, 1, invoice.buyerAddressLine);
   setCell(
     sheet,
     13,
     1,
-    `${client.city} - ${client.pincode} ${client.state}. India.`,
+    `${invoice.buyerCity} - ${invoice.buyerPincode} ${invoice.buyerState}. India.`,
   );
   setCell(sheet, 14, 1, `GSTIN/UIN:- ${invoice.buyerGstin}`);
   setCell(
     sheet,
     15,
     1,
-    `State Name : ${client.state}, Code : ${client.stateCode}`,
+    `State Name : ${invoice.buyerState}, Code : ${invoice.buyerStateCode}`,
   );
 
   setCell(sheet, 16, 1, "Tax subject to reverse charge");
