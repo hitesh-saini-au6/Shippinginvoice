@@ -36,12 +36,13 @@ import { loadPincodeMaster } from "@/config/pincodeMaster";
 import { parseDelhiveryFile } from "@/services/csv/parser";
 import {
   exportInvoiceToExcel,
-  getInvoiceFilename,
 } from "@/services/excel/invoiceExporter";
+import { exportInvoiceToPdf } from "@/services/pdf/invoiceExporter";
 import { buildInvoice } from "@/services/invoice/invoiceBuilder";
 import { hasLineIssues } from "@/services/invoice/validation";
 import { formatCurrency } from "@/utils/currency";
 import { formatPickupDate } from "@/utils/date";
+import { getInvoiceFilename } from "@/utils/invoiceFilename";
 import { applyPickupDateRangeToForm } from "@/utils/shipmentDates";
 import { formatWeightGrams } from "@/utils/weight";
 import type {
@@ -76,7 +77,8 @@ export function CourierInvoiceDashboard() {
   const [generateInfo, setGenerateInfo] = useState<string | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
-  const [isDownloading, setIsDownloading] = useState(false);
+  const [isDownloadingExcel, setIsDownloadingExcel] = useState(false);
+  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
 
   const {
     register,
@@ -205,17 +207,17 @@ export function CourierInvoiceDashboard() {
     }
 
     setGenerateInfo(
-      `Invoice ready: ${generated.summary.totalShipments} shipments, freight ${formatCurrency(generated.summary.totalFreight)}, total with GST ${formatCurrency(generated.summary.gst.totalInvoiceValue)}. Click Download Excel.`,
+      `Invoice ready: ${generated.summary.totalShipments} shipments, freight ${formatCurrency(generated.summary.totalFreight)}, total with GST ${formatCurrency(generated.summary.gst.totalInvoiceValue)}. Download Excel or PDF.`,
     );
   });
 
-  const handleDownload = async () => {
+  const handleDownloadExcel = async () => {
     if (!invoice || invoice.lines.length === 0) {
       setDownloadError("Generate an invoice with at least one shipment first.");
       return;
     }
 
-    setIsDownloading(true);
+    setIsDownloadingExcel(true);
     setDownloadError(null);
 
     try {
@@ -223,18 +225,39 @@ export function CourierInvoiceDashboard() {
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = url;
-      anchor.download = getInvoiceFilename(invoice);
+      anchor.download = getInvoiceFilename(invoice, "xlsx");
       document.body.appendChild(anchor);
       anchor.click();
       document.body.removeChild(anchor);
       URL.revokeObjectURL(url);
-      setGenerateInfo(`Downloaded ${getInvoiceFilename(invoice)}`);
+      setGenerateInfo(`Downloaded ${getInvoiceFilename(invoice, "xlsx")}`);
     } catch {
       setDownloadError(
         "Excel download failed. Try again or use a desktop browser (Chrome/Edge).",
       );
     } finally {
-      setIsDownloading(false);
+      setIsDownloadingExcel(false);
+    }
+  };
+
+  const handleDownloadPdf = () => {
+    if (!invoice || invoice.lines.length === 0) {
+      setDownloadError("Generate an invoice with at least one shipment first.");
+      return;
+    }
+
+    setIsDownloadingPdf(true);
+    setDownloadError(null);
+
+    try {
+      exportInvoiceToPdf(invoice);
+      setGenerateInfo(`Downloaded ${getInvoiceFilename(invoice, "pdf")}`);
+    } catch {
+      setDownloadError(
+        "PDF download failed. Try again or use a desktop browser (Chrome/Edge).",
+      );
+    } finally {
+      setIsDownloadingPdf(false);
     }
   };
 
@@ -267,7 +290,7 @@ export function CourierInvoiceDashboard() {
         <CardHeader className="pb-3">
           <CardTitle className="text-base">How to use</CardTitle>
         </CardHeader>
-        <CardContent className="grid gap-2 text-sm text-muted-foreground md:grid-cols-4">
+        <CardContent className="grid gap-2 text-sm text-muted-foreground md:grid-cols-5">
           <p>
             <strong className="text-foreground">1.</strong> Upload Delhivery
             billing file (.csv or .xlsx)
@@ -281,8 +304,13 @@ export function CourierInvoiceDashboard() {
             <strong className="text-foreground">Generate Invoice</strong>
           </p>
           <p>
-            <strong className="text-foreground">4.</strong> Click{" "}
-            <strong className="text-foreground">Download Excel</strong>
+            <strong className="text-foreground">4.</strong> Download{" "}
+            <strong className="text-foreground">Excel</strong> or{" "}
+            <strong className="text-foreground">PDF</strong>
+          </p>
+          <p>
+            <strong className="text-foreground">5.</strong> Print PDF directly
+            for bills
           </p>
         </CardContent>
       </Card>
@@ -376,10 +404,22 @@ export function CourierInvoiceDashboard() {
             <Button
               type="button"
               variant="outline"
-              disabled={!invoice || invoice.lines.length === 0 || isDownloading}
-              onClick={handleDownload}
+              disabled={
+                !invoice || invoice.lines.length === 0 || isDownloadingExcel
+              }
+              onClick={handleDownloadExcel}
             >
-              {isDownloading ? "Preparing..." : "Download Excel"}
+              {isDownloadingExcel ? "Preparing..." : "Download Excel"}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={
+                !invoice || invoice.lines.length === 0 || isDownloadingPdf
+              }
+              onClick={handleDownloadPdf}
+            >
+              {isDownloadingPdf ? "Preparing..." : "Download PDF"}
             </Button>
           </div>
         </CardContent>

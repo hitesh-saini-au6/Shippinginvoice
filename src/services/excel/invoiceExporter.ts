@@ -11,7 +11,6 @@ import {
   formatCurrency,
 } from "@/utils/currency";
 import {
-  formatFilenameDate,
   formatInvoiceDate,
   formatInvoicePeriod,
   formatPaymentDueDate,
@@ -351,6 +350,4 @@ export async function exportInvoiceToExcel(
   });
 }
 
-export function getInvoiceFilename(invoice: GeneratedInvoice): string {
-  return `Invoice_${formatFilenameDate(invoice.billingFrom)}_to_${formatFilenameDate(invoice.billingTo)}.xlsx`;
-}
+export { getInvoiceFilename } from "@/utils/invoiceFilename";
