@@ -8,6 +8,8 @@ export interface DelhiveryShipment {
   pincode: string;
   orderId: string;
   rawRow: RawCsvRow;
+  /** Present when the row was added manually in the UI. */
+  manualId?: string;
 }
 
 export interface PincodeRecord {

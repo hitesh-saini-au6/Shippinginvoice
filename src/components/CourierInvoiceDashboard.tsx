@@ -31,6 +31,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { ManualShipmentEntry } from "@/components/ManualShipmentEntry";
 import { businessDetails, clients } from "@/config/invoiceSettings";
 import { loadPincodeMaster } from "@/config/pincodeMaster";
 import { parseDelhiveryFile } from "@/services/csv/parser";
@@ -362,6 +363,11 @@ export function CourierInvoiceDashboard() {
     billingTo;
 
   const showInvoiceDetails = shipments.length > 0 && csvErrors.length === 0;
+  const manualShipmentCount = useMemo(
+    () => shipments.filter((shipment) => shipment.manualId).length,
+    [shipments],
+  );
+  const uploadedShipmentCount = shipments.length - manualShipmentCount;
 
   return (
     <div className="mx-auto flex min-h-screen max-w-7xl flex-col gap-6 p-6">
@@ -379,26 +385,30 @@ export function CourierInvoiceDashboard() {
         <CardHeader className="pb-3">
           <CardTitle className="text-base">How to use</CardTitle>
         </CardHeader>
-        <CardContent className="grid gap-2 text-sm text-muted-foreground md:grid-cols-5">
+        <CardContent className="grid gap-2 text-sm text-muted-foreground md:grid-cols-6">
           <p>
             <strong className="text-foreground">1.</strong> Upload Delhivery
             billing file (.csv or .xlsx)
           </p>
           <p>
-            <strong className="text-foreground">2.</strong> Check billing
-            dates (auto-filled from pickup dates)
+            <strong className="text-foreground">2.</strong> Add any missing row
+            manually (optional)
           </p>
           <p>
-            <strong className="text-foreground">3.</strong> Click{" "}
+            <strong className="text-foreground">3.</strong> Check billing dates
+            (auto-filled from pickup dates)
+          </p>
+          <p>
+            <strong className="text-foreground">4.</strong> Click{" "}
             <strong className="text-foreground">Generate Invoice</strong>
           </p>
           <p>
-            <strong className="text-foreground">4.</strong> Download{" "}
+            <strong className="text-foreground">5.</strong> Download{" "}
             <strong className="text-foreground">Excel</strong> or{" "}
             <strong className="text-foreground">PDF</strong>
           </p>
           <p>
-            <strong className="text-foreground">5.</strong> Print PDF directly
+            <strong className="text-foreground">6.</strong> Print PDF directly
             for bills
           </p>
         </CardContent>
@@ -438,7 +448,10 @@ export function CourierInvoiceDashboard() {
             )}
             {csvFileName && !isUploading && (
               <p className="text-sm font-medium text-foreground">
-                File: {csvFileName} · {shipments.length} shipments in file
+                File: {csvFileName} · {uploadedShipmentCount} from file
+                {manualShipmentCount > 0
+                  ? ` · ${manualShipmentCount} added manually`
+                  : ""}
               </p>
             )}
           </div>
@@ -531,6 +544,21 @@ export function CourierInvoiceDashboard() {
           </div>
         </CardContent>
       </Card>
+
+      {showInvoiceDetails && (
+        <ManualShipmentEntry
+          shipments={shipments}
+          billingFrom={billingFrom}
+          billingTo={billingTo}
+          onShipmentsChange={setShipments}
+          onInvoiceStale={() => {
+            setInvoice(null);
+            setGenerateInfo(null);
+            setGenerateError(null);
+            setDownloadError(null);
+          }}
+        />
+      )}
 
       {showInvoiceDetails && (
         <Card>
