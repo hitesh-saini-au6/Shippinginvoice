@@ -82,16 +82,11 @@ function buildTableColumnWidths(
     widths[8] += extra * 0.15;
   }
 
-  return widths;
-}
+  const sum = Object.values(widths).reduce((total, width) => total + width, 0);
+  const diff = tableWidth - sum;
+  widths[10] += diff;
 
-function ensureSpace(doc: jsPDF, y: number, needed: number, margin: number): number {
-  const pageHeight = doc.internal.pageSize.getHeight();
-  if (y + needed <= pageHeight - 12) {
-    return y;
-  }
-  doc.addPage();
-  return margin;
+  return widths;
 }
 
 function drawSummaryBox(
@@ -238,7 +233,13 @@ export function exportInvoiceToPdf(
   );
   y += 4;
 
-  y = ensureSpace(doc, y, 8, margin);
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const tableWidth = pageWidth - margin * 2;
+
+  if (y + 12 > pageHeight - 12) {
+    doc.addPage();
+    y = margin;
+  }
 
   doc.setFontSize(7);
   doc.setFont("helvetica", "bold");
@@ -247,11 +248,9 @@ export function exportInvoiceToPdf(
     `Customer: ${client.name}   Invoice No: ${invoice.invoiceNumber}   Date: ${formatInvoiceDate(invoice.invoiceDate)}   Amount: ${formatCurrency(summary.gst.totalInvoiceValue)}`,
     margin,
     y,
-    { maxWidth: pageWidth - margin * 2 },
+    { maxWidth: tableWidth },
   );
-  y += 4;
-
-  y = ensureSpace(doc, y, 14, margin);
+  y += 3;
 
   const tableBody = invoice.lines.map((line) => [
     String(line.srNo),
@@ -267,7 +266,6 @@ export function exportInvoiceToPdf(
     line.amount != null ? formatCurrency(line.amount) : "",
   ]);
 
-  const tableWidth = pageWidth - margin * 2;
   const columnWidths = buildTableColumnWidths(doc, invoice, tableWidth);
 
   autoTable(doc, {
@@ -337,7 +335,7 @@ export function exportInvoiceToPdf(
       1: { halign: "center", cellWidth: columnWidths[1] },
       2: { cellWidth: columnWidths[2] },
       3: { cellWidth: columnWidths[3] },
-      4: { halign: "left", cellWidth: columnWidths[4], overflow: "visible" },
+      4: { halign: "left", cellWidth: columnWidths[4] },
       5: { halign: "center", cellWidth: columnWidths[5] },
       6: { halign: "center", cellWidth: columnWidths[6] },
       7: { halign: "center", cellWidth: columnWidths[7] },
@@ -368,7 +366,7 @@ export function exportInvoiceToPdf(
         data.cell.styles.fillColor = ISSUE_YELLOW;
       }
     },
-    margin: { left: margin, right: margin, bottom: 12 },
+    margin: { left: margin, right: margin, top: margin, bottom: 10 },
     showHead: "everyPage",
     showFoot: "lastPage",
   });
