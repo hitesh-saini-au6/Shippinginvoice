@@ -30,6 +30,48 @@ function setBlackText(doc: jsPDF): void {
   doc.setTextColor(...BLACK);
 }
 
+function getDestinationColumnWidth(
+  doc: jsPDF,
+  destinations: string[],
+): number {
+  doc.setFontSize(6.5);
+  doc.setFont("helvetica", "bold");
+  let maxWidth = doc.getTextWidth("Destination");
+  doc.setFont("helvetica", "normal");
+
+  for (const destination of destinations) {
+    if (destination) {
+      maxWidth = Math.max(maxWidth, doc.getTextWidth(destination));
+    }
+  }
+
+  return Math.min(Math.max(maxWidth + 2.5, 16), 42);
+}
+
+function buildTableColumnWidths(
+  doc: jsPDF,
+  invoice: GeneratedInvoice,
+): Record<number, number> {
+  const destinationWidth = getDestinationColumnWidth(
+    doc,
+    invoice.lines.map((line) => line.destination),
+  );
+
+  return {
+    0: 7,
+    1: 14,
+    2: 28,
+    3: 20,
+    4: destinationWidth,
+    5: 12,
+    6: 12,
+    7: 7,
+    8: 11,
+    9: 8,
+    10: 15,
+  };
+}
+
 function drawSummaryBox(
   doc: jsPDF,
   x: number,
@@ -200,20 +242,11 @@ export function exportInvoiceToPdf(
     line.amount != null ? formatCurrency(line.amount) : "",
   ]);
 
-  const tableWidth = pageWidth - margin * 2;
-  const columnWidths = {
-    0: 7,
-    1: 14,
-    2: 28,
-    3: 20,
-    4: tableWidth - 7 - 14 - 28 - 20 - 12 - 12 - 7 - 11 - 8 - 15,
-    5: 12,
-    6: 12,
-    7: 7,
-    8: 11,
-    9: 8,
-    10: 15,
-  };
+  const columnWidths = buildTableColumnWidths(doc, invoice);
+  const tableWidth = Object.values(columnWidths).reduce(
+    (total, width) => total + width,
+    0,
+  );
 
   autoTable(doc, {
     startY: y,
@@ -282,7 +315,7 @@ export function exportInvoiceToPdf(
       1: { halign: "center", cellWidth: columnWidths[1] },
       2: { cellWidth: columnWidths[2] },
       3: { cellWidth: columnWidths[3] },
-      4: { cellWidth: columnWidths[4] },
+      4: { halign: "left", cellWidth: columnWidths[4], overflow: "visible" },
       5: { halign: "center", cellWidth: columnWidths[5] },
       6: { halign: "center", cellWidth: columnWidths[6] },
       7: { halign: "center", cellWidth: columnWidths[7] },
