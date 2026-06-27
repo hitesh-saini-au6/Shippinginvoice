@@ -20,6 +20,8 @@ import {
 import { formatWeightGrams } from "@/utils/weight";
 import type { GeneratedInvoice } from "@/types";
 
+const TOTAL_COLUMNS = 11;
+
 const THIN_BORDER: Partial<ExcelJS.Borders> = {
   top: { style: "thin" },
   left: { style: "thin" },
@@ -90,6 +92,7 @@ function buildHeaderSection(
     { width: 10 },
     { width: 8 },
     { width: 10 },
+    { width: 8 },
     { width: 12 },
   ];
 
@@ -97,7 +100,7 @@ function buildHeaderSection(
     bold: true,
     size: 16,
     align: { horizontal: "center" },
-    mergeTo: { row: 1, col: 10 },
+    mergeTo: { row: 1, col: TOTAL_COLUMNS },
   });
 
   setCell(sheet, 3, 1, businessDetails.name, { bold: true });
@@ -141,15 +144,15 @@ function buildHeaderSection(
 
   let summaryRow = 3;
   for (const [label, value] of summaryRows) {
-    setCell(sheet, summaryRow, 7, label, { bold: label.includes("Total") });
-    const valueCell = setCell(sheet, summaryRow, 9, value, {
+    setCell(sheet, summaryRow, 8, label, { bold: label.includes("Total") });
+    const valueCell = setCell(sheet, summaryRow, 10, value, {
       align: { horizontal: "right" },
     });
-    applyBorder(sheet.getCell(summaryRow, 7));
     applyBorder(sheet.getCell(summaryRow, 8));
+    applyBorder(sheet.getCell(summaryRow, 9));
     applyBorder(valueCell);
-    sheet.mergeCells(summaryRow, 7, summaryRow, 8);
-    sheet.mergeCells(summaryRow, 9, summaryRow, 10);
+    sheet.mergeCells(summaryRow, 8, summaryRow, 9);
+    sheet.mergeCells(summaryRow, 10, summaryRow, TOTAL_COLUMNS);
     summaryRow += 1;
   }
 
@@ -180,14 +183,14 @@ function buildHeaderSection(
     wordsRow,
     3,
     amountToWords(summary.gst.totalInvoiceValue),
-    { mergeTo: { row: wordsRow, col: 10 } },
+    { mergeTo: { row: wordsRow, col: TOTAL_COLUMNS } },
   );
 
   const serviceRow = 19;
   setCell(sheet, serviceRow, 1, "Description of Services", { bold: true });
   setCell(sheet, serviceRow, 2, "Courier Services");
-  setCell(sheet, serviceRow, 9, "SAC No", { bold: true });
-  setCell(sheet, serviceRow, 10, businessDetails.sacNo);
+  setCell(sheet, serviceRow, 10, "SAC No", { bold: true });
+  setCell(sheet, serviceRow, 11, businessDetails.sacNo);
 
   const bankRow = 21;
   setCell(sheet, bankRow, 1, "Bank Details", { bold: true });
@@ -198,12 +201,12 @@ function buildHeaderSection(
 
   setCell(sheet, bankRow, 6, "Statutory Guidelines", {
     bold: true,
-    mergeTo: { row: bankRow, col: 10 },
+    mergeTo: { row: bankRow, col: TOTAL_COLUMNS },
   });
 
   statutoryGuidelines.forEach((guideline, index) => {
     setCell(sheet, bankRow + 1 + index, 6, `${index + 1}. ${guideline}`, {
-      mergeTo: { row: bankRow + 1 + index, col: 10 },
+      mergeTo: { row: bankRow + 1 + index, col: TOTAL_COLUMNS },
     });
   });
 
@@ -223,11 +226,11 @@ function buildHeaderSection(
   setCell(sheet, stripRow, 5, invoice.invoiceNumber);
   setCell(sheet, stripRow, 7, "Invoice Date :", { bold: true });
   setCell(sheet, stripRow, 8, formatInvoiceDate(invoice.invoiceDate));
-  setCell(sheet, stripRow, 9, "Invoice Amount :", { bold: true });
+  setCell(sheet, stripRow, 10, "Invoice Amount :", { bold: true });
   setCell(
     sheet,
     stripRow,
-    10,
+    11,
     formatCurrency(summary.gst.totalInvoiceValue),
   );
 
@@ -245,6 +248,7 @@ function buildTableHeader(sheet: ExcelJS.Worksheet, row: number): number {
     "Type",
     "Mode",
     "Weight",
+    "Zone",
     "Amount",
   ];
 
@@ -281,16 +285,22 @@ export async function exportInvoiceToExcel(
       line.type,
       line.mode,
       line.weightGrams != null ? Number(formatWeightGrams(line.weightGrams)) : "",
+      line.zone,
       line.amount ?? "",
     ];
 
     values.forEach((value, index) => {
       const cell = setCell(sheet, currentRow, index + 1, value, {
         align: {
-          horizontal: index >= 8 ? "right" : "left",
+          horizontal:
+            index === 8 || index === 10
+              ? "right"
+              : index === 9
+                ? "center"
+                : "left",
           vertical: "middle",
         },
-        numFmt: index === 9 ? "#,##0.00" : undefined,
+        numFmt: index === 10 ? "#,##0.00" : undefined,
       });
       applyBorder(cell);
 
@@ -306,14 +316,15 @@ export async function exportInvoiceToExcel(
     currentRow += 1;
   }
 
-  setCell(sheet, currentRow, 8, "Forward Shipments Total", {
+  setCell(sheet, currentRow, 9, "Forward Shipments Total", {
     bold: true,
     align: { horizontal: "right" },
+    mergeTo: { row: currentRow, col: 10 },
   });
   const totalCell = setCell(
     sheet,
     currentRow,
-    10,
+    11,
     invoice.summary.totalFreight,
     {
       bold: true,
@@ -321,8 +332,8 @@ export async function exportInvoiceToExcel(
       numFmt: "#,##0.00",
     },
   );
-  applyBorder(sheet.getCell(currentRow, 8));
   applyBorder(sheet.getCell(currentRow, 9));
+  applyBorder(sheet.getCell(currentRow, 10));
   applyBorder(totalCell);
 
   setCell(
