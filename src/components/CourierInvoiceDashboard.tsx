@@ -79,6 +79,7 @@ export function CourierInvoiceDashboard() {
   const [isUploading, setIsUploading] = useState(false);
   const [isDownloadingExcel, setIsDownloadingExcel] = useState(false);
   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
+  const [highlightPdfIssues, setHighlightPdfIssues] = useState(false);
 
   const {
     register,
@@ -250,7 +251,9 @@ export function CourierInvoiceDashboard() {
     setDownloadError(null);
 
     try {
-      exportInvoiceToPdf(invoice);
+      exportInvoiceToPdf(invoice, {
+        highlightIssueRows: highlightPdfIssues,
+      });
       setGenerateInfo(`Downloaded ${getInvoiceFilename(invoice, "pdf")}`);
     } catch {
       setDownloadError(
@@ -397,7 +400,20 @@ export function CourierInvoiceDashboard() {
             )}
           </div>
 
-          <div className="md:col-span-2 flex flex-wrap gap-3">
+          <div className="md:col-span-2 flex flex-col gap-3">
+            <label className="flex cursor-pointer items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={highlightPdfIssues}
+                onChange={(event) => setHighlightPdfIssues(event.target.checked)}
+                className="size-4 rounded border"
+              />
+              <span>
+                Highlight issue rows in PDF (yellow) — leave unchecked for
+                clean black print
+              </span>
+            </label>
+            <div className="flex flex-wrap gap-3">
             <Button type="button" onClick={onGenerate} disabled={!canGenerate}>
               Generate Invoice
             </Button>
@@ -421,6 +437,7 @@ export function CourierInvoiceDashboard() {
             >
               {isDownloadingPdf ? "Preparing..." : "Download PDF"}
             </Button>
+            </div>
           </div>
         </CardContent>
       </Card>

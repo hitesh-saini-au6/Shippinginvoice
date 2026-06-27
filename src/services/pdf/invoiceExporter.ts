@@ -17,6 +17,19 @@ import { getInvoiceFilename } from "@/utils/invoiceFilename";
 import { formatWeightGrams } from "@/utils/weight";
 import type { GeneratedInvoice } from "@/types";
 
+export interface PdfExportOptions {
+  /** When false (default), PDF is clean for printing — no yellow issue rows. */
+  highlightIssueRows?: boolean;
+}
+
+const BLACK: [number, number, number] = [0, 0, 0];
+const WHITE: [number, number, number] = [255, 255, 255];
+const ISSUE_YELLOW: [number, number, number] = [255, 243, 205];
+
+function setBlackText(doc: jsPDF): void {
+  doc.setTextColor(...BLACK);
+}
+
 function drawSummaryBox(
   doc: jsPDF,
   x: number,
@@ -38,16 +51,18 @@ function drawSummaryBox(
 
   const rowHeight = 5;
   const boxHeight = rows.length * rowHeight + 4;
-  doc.setDrawColor(0);
-  doc.setLineWidth(0.2);
+  doc.setDrawColor(...BLACK);
+  doc.setLineWidth(0.35);
   doc.rect(x, y, width, boxHeight);
 
   let currentY = y + 4;
   doc.setFontSize(8);
+  setBlackText(doc);
 
   for (const [label, value] of rows) {
     const isTotal = label.includes("Total");
     doc.setFont("helvetica", isTotal ? "bold" : "normal");
+    setBlackText(doc);
     doc.text(label, x + 2, currentY);
     doc.text(value, x + width - 2, currentY, { align: "right" });
     currentY += rowHeight;
@@ -56,7 +71,11 @@ function drawSummaryBox(
   return boxHeight;
 }
 
-export function exportInvoiceToPdf(invoice: GeneratedInvoice): void {
+export function exportInvoiceToPdf(
+  invoice: GeneratedInvoice,
+  options: PdfExportOptions = {},
+): void {
+  const highlightIssueRows = options.highlightIssueRows ?? false;
   const client =
     clients.find((item) => item.id === invoice.clientId) ?? clients[0];
   const { summary } = invoice;
@@ -73,10 +92,12 @@ export function exportInvoiceToPdf(invoice: GeneratedInvoice): void {
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(16);
+  setBlackText(doc);
   doc.text("Tax Invoice", pageWidth / 2, y, { align: "center" });
   y += 8;
 
   doc.setFontSize(9);
+  setBlackText(doc);
   doc.text(businessDetails.name, margin, y);
   const summaryHeight = drawSummaryBox(
     doc,
@@ -88,6 +109,7 @@ export function exportInvoiceToPdf(invoice: GeneratedInvoice): void {
   y += 5;
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8);
+  setBlackText(doc);
   doc.text(businessDetails.addressLine, margin, y, { maxWidth: 120 });
   y += 4;
   doc.text(
@@ -201,11 +223,11 @@ export function exportInvoiceToPdf(invoice: GeneratedInvoice): void {
         {
           content: "Forward Shipments Total",
           colSpan: 10,
-          styles: { halign: "right", fontStyle: "bold" },
+          styles: { halign: "right", fontStyle: "bold", textColor: BLACK },
         },
         {
           content: formatCurrency(summary.totalFreight),
-          styles: { halign: "right", fontStyle: "bold" },
+          styles: { halign: "right", fontStyle: "bold", textColor: BLACK },
         },
       ],
     ],
@@ -216,12 +238,25 @@ export function exportInvoiceToPdf(invoice: GeneratedInvoice): void {
       cellPadding: 1.2,
       overflow: "linebreak",
       valign: "middle",
+      textColor: BLACK,
+      lineColor: BLACK,
+      lineWidth: 0.25,
+      fillColor: WHITE,
     },
     headStyles: {
-      fillColor: [230, 230, 230],
-      textColor: 0,
+      fillColor: WHITE,
+      textColor: BLACK,
       fontStyle: "bold",
       halign: "center",
+      lineColor: BLACK,
+      lineWidth: 0.35,
+    },
+    footStyles: {
+      fillColor: WHITE,
+      textColor: BLACK,
+      fontStyle: "bold",
+      lineColor: BLACK,
+      lineWidth: 0.35,
     },
     columnStyles: {
       0: { halign: "center", cellWidth: 10 },
@@ -234,9 +269,17 @@ export function exportInvoiceToPdf(invoice: GeneratedInvoice): void {
       if (data.section !== "body") {
         return;
       }
+      data.cell.styles.textColor = BLACK;
+      data.cell.styles.lineColor = BLACK;
+
+      if (!highlightIssueRows) {
+        data.cell.styles.fillColor = WHITE;
+        return;
+      }
+
       const line = invoice.lines[data.row.index];
       if (line?.issues.length) {
-        data.cell.styles.fillColor = [255, 243, 205];
+        data.cell.styles.fillColor = ISSUE_YELLOW;
       }
     },
     margin: { left: margin, right: margin },
@@ -275,6 +318,7 @@ export function exportInvoiceToPdf(invoice: GeneratedInvoice): void {
     doc.setPage(page);
     doc.setFontSize(7);
     doc.setFont("helvetica", "normal");
+    setBlackText(doc);
     doc.text(
       `Page ${page} of ${pageCount}`,
       pageWidth / 2,
