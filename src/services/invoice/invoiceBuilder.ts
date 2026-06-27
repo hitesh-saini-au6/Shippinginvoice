@@ -6,6 +6,7 @@ import { buildInvoiceSummary } from "@/services/invoice/validation";
 import type {
   DelhiveryShipment,
   GeneratedInvoice,
+  InvoiceBuildOptions,
   InvoiceLine,
   InvoiceLineIssue,
   PincodeMaster,
@@ -57,10 +58,10 @@ export function buildInvoice(
   billingFrom: Date,
   billingTo: Date,
   clientId: string,
-  invoiceDate: Date = new Date(),
-  invoiceNumber?: string,
+  options: InvoiceBuildOptions,
 ): GeneratedInvoice {
   const client = clients.find((item) => item.id === clientId) ?? clients[0];
+  const invoiceDate = options.invoiceDate ?? new Date();
   const filtered = sortByPickupDate(
     filterByPickupDate(shipments, billingFrom, billingTo),
   );
@@ -97,12 +98,14 @@ export function buildInvoice(
   });
 
   const resolvedInvoiceNumber =
-    invoiceNumber ??
+    options.invoiceNumber?.trim() ||
     `INV-${invoiceDate.getFullYear()}${String(invoiceDate.getMonth() + 1).padStart(2, "0")}-${String(invoiceDate.getDate()).padStart(2, "0")}`;
 
   return {
     clientId: client.id,
     clientName: client.name,
+    supplierName: options.supplierName.trim(),
+    supplierGstin: options.supplierGstin.trim(),
     billingFrom,
     billingTo,
     invoiceDate,

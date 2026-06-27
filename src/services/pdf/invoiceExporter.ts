@@ -157,7 +157,7 @@ export function exportInvoiceToPdf(
 
   doc.setFontSize(9);
   setBlackText(doc);
-  doc.text(businessDetails.name, margin, y);
+  doc.text(invoice.supplierName, margin, y);
   const summaryHeight = drawSummaryBox(
     doc,
     pageWidth - margin - 72,
@@ -177,7 +177,7 @@ export function exportInvoiceToPdf(
     y,
   );
   y += 3;
-  doc.text(`GSTIN/UIN:- ${businessDetails.gstin}`, margin, y);
+  doc.text(`GSTIN/UIN:- ${invoice.supplierGstin}`, margin, y);
   y += 3;
   doc.text(
     `State Name : ${businessDetails.state}, Code : ${businessDetails.stateCode}`,
@@ -388,7 +388,7 @@ export function exportInvoiceToPdf(
       guidelineY += 4;
     }
     doc.setFont("helvetica", "bold");
-    doc.text(`for ${businessDetails.name}`, pageWidth - margin, guidelineY + 4, {
+    doc.text(`for ${invoice.supplierName}`, pageWidth - margin, guidelineY + 4, {
       align: "right",
     });
     doc.setFont("helvetica", "normal");

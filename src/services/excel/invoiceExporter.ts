@@ -102,7 +102,7 @@ function buildHeaderSection(
     mergeTo: { row: 1, col: TOTAL_COLUMNS },
   });
 
-  setCell(sheet, 3, 1, businessDetails.name, { bold: true });
+  setCell(sheet, 3, 1, invoice.supplierName, { bold: true });
   setCell(sheet, 4, 1, businessDetails.addressLine);
   setCell(
     sheet,
@@ -110,7 +110,7 @@ function buildHeaderSection(
     1,
     `${businessDetails.city} - ${businessDetails.pincode} ${businessDetails.state}. India.`,
   );
-  setCell(sheet, 6, 1, `GSTIN/UIN:- ${businessDetails.gstin}`);
+  setCell(sheet, 6, 1, `GSTIN/UIN:- ${invoice.supplierGstin}`);
   setCell(
     sheet,
     7,
@@ -339,7 +339,7 @@ export async function exportInvoiceToExcel(
     sheet,
     currentRow + 2,
     1,
-    `for ${businessDetails.name}`,
+    `for ${invoice.supplierName}`,
     { bold: true },
   );
   setCell(sheet, currentRow + 4, 1, "Authorised Signatory");

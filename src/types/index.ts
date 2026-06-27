@@ -57,12 +57,21 @@ export interface InvoiceSummary {
 export interface GeneratedInvoice {
   clientId: string;
   clientName: string;
+  supplierName: string;
+  supplierGstin: string;
   billingFrom: Date;
   billingTo: Date;
   invoiceDate: Date;
   invoiceNumber: string;
   lines: InvoiceLine[];
   summary: InvoiceSummary;
+}
+
+export interface InvoiceBuildOptions {
+  invoiceNumber?: string;
+  supplierName: string;
+  supplierGstin: string;
+  invoiceDate?: Date;
 }
 
 export interface CsvParseResult {

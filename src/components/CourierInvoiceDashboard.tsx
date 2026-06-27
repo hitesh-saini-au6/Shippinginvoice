@@ -31,7 +31,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { clients } from "@/config/invoiceSettings";
+import { businessDetails, clients } from "@/config/invoiceSettings";
 import { loadPincodeMaster } from "@/config/pincodeMaster";
 import { parseDelhiveryFile } from "@/services/csv/parser";
 import {
@@ -56,6 +56,9 @@ const formSchema = z
     clientId: z.string().min(1, "Client is required"),
     billingFrom: z.string().min(1, "Billing from date is required"),
     billingTo: z.string().min(1, "Billing to date is required"),
+    invoiceNumber: z.string().optional(),
+    supplierName: z.string().min(1, "Supplier name is required"),
+    supplierGstin: z.string().min(1, "Supplier GST is required"),
   })
   .refine((data) => new Date(data.billingFrom) <= new Date(data.billingTo), {
     message: "Billing from date must be on or before billing to date",
@@ -93,6 +96,9 @@ export function CourierInvoiceDashboard() {
       clientId: clients[0]?.id ?? "",
       billingFrom: "",
       billingTo: "",
+      invoiceNumber: "",
+      supplierName: businessDetails.name,
+      supplierGstin: businessDetails.gstin,
     },
   });
 
@@ -146,6 +152,10 @@ export function CourierInvoiceDashboard() {
           (field, value) => setValue(field, value, { shouldValidate: true }),
         );
 
+        setValue("invoiceNumber", "", { shouldValidate: true });
+        setValue("supplierName", businessDetails.name, { shouldValidate: true });
+        setValue("supplierGstin", businessDetails.gstin, { shouldValidate: true });
+
         setUploadMessage(
           `Loaded ${result.shipments.length} shipments from ${file.name}.${dateRange ? ` Billing dates set to ${dateRange.from} → ${dateRange.to} (pickup date range).` : ""} Now click Generate Invoice.`,
         );
@@ -196,6 +206,11 @@ export function CourierInvoiceDashboard() {
       new Date(`${values.billingFrom}T00:00:00`),
       new Date(`${values.billingTo}T23:59:59`),
       values.clientId,
+      {
+        invoiceNumber: values.invoiceNumber,
+        supplierName: values.supplierName,
+        supplierGstin: values.supplierGstin,
+      },
     );
 
     setInvoice(generated);
@@ -276,6 +291,8 @@ export function CourierInvoiceDashboard() {
     csvErrors.length === 0 &&
     billingFrom &&
     billingTo;
+
+  const showInvoiceDetails = shipments.length > 0 && csvErrors.length === 0;
 
   return (
     <div className="mx-auto flex min-h-screen max-w-7xl flex-col gap-6 p-6">
@@ -441,6 +458,59 @@ export function CourierInvoiceDashboard() {
           </div>
         </CardContent>
       </Card>
+
+      {showInvoiceDetails && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Invoice Details</CardTitle>
+            <CardDescription>
+              Enter invoice number and supplier (your business) details for
+              Excel and PDF export.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-6 md:grid-cols-3">
+            <div className="space-y-2">
+              <Label htmlFor="invoice-number">Invoice No</Label>
+              <Input
+                id="invoice-number"
+                placeholder="e.g. 998"
+                {...register("invoiceNumber")}
+              />
+              <p className="text-xs text-muted-foreground">
+                Leave blank to auto-generate
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="supplier-name">Supplier Name</Label>
+              <Input
+                id="supplier-name"
+                placeholder="Your business name"
+                {...register("supplierName")}
+              />
+              {errors.supplierName && (
+                <p className="text-sm text-destructive">
+                  {errors.supplierName.message}
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="supplier-gstin">Supplier GSTIN</Label>
+              <Input
+                id="supplier-gstin"
+                placeholder="e.g. 08BCNPT9914J1ZQ"
+                {...register("supplierGstin")}
+              />
+              {errors.supplierGstin && (
+                <p className="text-sm text-destructive">
+                  {errors.supplierGstin.message}
+                </p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {uploadMessage && (
         <Alert>
