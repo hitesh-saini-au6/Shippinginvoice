@@ -111,40 +111,40 @@ export function exportInvoiceToPdf(
   doc.setFontSize(8);
   setBlackText(doc);
   doc.text(businessDetails.addressLine, margin, y, { maxWidth: 120 });
-  y += 4;
+  y += 3;
   doc.text(
     `${businessDetails.city} - ${businessDetails.pincode} ${businessDetails.state}. India.`,
     margin,
     y,
   );
-  y += 4;
+  y += 3;
   doc.text(`GSTIN/UIN:- ${businessDetails.gstin}`, margin, y);
-  y += 4;
+  y += 3;
   doc.text(
     `State Name : ${businessDetails.state}, Code : ${businessDetails.stateCode}`,
     margin,
     y,
   );
-  y += 4;
+  y += 3;
   doc.text(`E-Mail :- ${businessDetails.email}`, margin, y);
 
-  y = Math.max(y + 6, y - 20 + summaryHeight + 6);
+  y = Math.max(y + 4, y - 14 + summaryHeight + 4);
   doc.setFont("helvetica", "bold");
   doc.text("Buyer", margin, y);
-  y += 4;
+  y += 3;
   doc.text(client.name, margin, y);
-  y += 4;
+  y += 3;
   doc.setFont("helvetica", "normal");
   doc.text(client.addressLine, margin, y);
-  y += 4;
+  y += 3;
   doc.text(
     `${client.city} - ${client.pincode} ${client.state}. India.`,
     margin,
     y,
   );
-  y += 4;
+  y += 3;
   doc.text(`GSTIN/UIN:- ${client.gstin}`, margin, y);
-  y += 6;
+  y += 4;
 
   doc.setFont("helvetica", "bold");
   doc.text("Amount in Words:", margin, y);
@@ -152,27 +152,27 @@ export function exportInvoiceToPdf(
   doc.text(amountToWords(summary.gst.totalInvoiceValue), margin + 28, y, {
     maxWidth: pageWidth - margin * 2 - 28,
   });
-  y += 6;
+  y += 4;
 
   doc.text(
     `Description of Services: Courier Services    SAC No: ${businessDetails.sacNo}`,
     margin,
     y,
   );
-  y += 5;
+  y += 3;
   doc.text(
     `Bank: ${businessDetails.bankName} | A/C: ${businessDetails.accountNo} | IFSC: ${businessDetails.ifsc} | ${businessDetails.branch}`,
     margin,
     y,
     { maxWidth: pageWidth - margin * 2 },
   );
-  y += 4;
+  y += 3;
   doc.text(
     `Payment Due: ${formatPaymentDueDate(invoice.invoiceDate, paymentSettings.dueDaysAfterInvoice)}`,
     margin,
     y,
   );
-  y += 6;
+  y += 4;
 
   doc.setFont("helvetica", "bold");
   doc.text(`Customer: ${client.name}`, margin, y);
@@ -184,7 +184,7 @@ export function exportInvoiceToPdf(
     y,
     { align: "right" },
   );
-  y += 4;
+  y += 2;
 
   const tableBody = invoice.lines.map((line) => [
     String(line.srNo),
@@ -200,8 +200,24 @@ export function exportInvoiceToPdf(
     line.amount != null ? formatCurrency(line.amount) : "",
   ]);
 
+  const tableWidth = pageWidth - margin * 2;
+  const columnWidths = {
+    0: 7,
+    1: 14,
+    2: 28,
+    3: 20,
+    4: tableWidth - 7 - 14 - 28 - 20 - 12 - 12 - 7 - 11 - 8 - 15,
+    5: 12,
+    6: 12,
+    7: 7,
+    8: 11,
+    9: 8,
+    10: 15,
+  };
+
   autoTable(doc, {
     startY: y,
+    tableWidth,
     head: [
       [
         "S. No.",
@@ -234,14 +250,15 @@ export function exportInvoiceToPdf(
     theme: "grid",
     styles: {
       font: "helvetica",
-      fontSize: 7,
-      cellPadding: 1.2,
+      fontSize: 6.5,
+      cellPadding: { top: 0.4, right: 0.8, bottom: 0.4, left: 0.8 },
       overflow: "linebreak",
       valign: "middle",
       textColor: BLACK,
       lineColor: BLACK,
-      lineWidth: 0.25,
+      lineWidth: 0.2,
       fillColor: WHITE,
+      minCellHeight: 4,
     },
     headStyles: {
       fillColor: WHITE,
@@ -249,28 +266,42 @@ export function exportInvoiceToPdf(
       fontStyle: "bold",
       halign: "center",
       lineColor: BLACK,
-      lineWidth: 0.35,
+      lineWidth: 0.25,
+      cellPadding: { top: 0.6, right: 0.8, bottom: 0.6, left: 0.8 },
     },
     footStyles: {
       fillColor: WHITE,
       textColor: BLACK,
       fontStyle: "bold",
       lineColor: BLACK,
-      lineWidth: 0.35,
+      lineWidth: 0.25,
+      cellPadding: { top: 0.6, right: 0.8, bottom: 0.6, left: 0.8 },
     },
     columnStyles: {
-      0: { halign: "center", cellWidth: 10 },
-      1: { cellWidth: 16 },
-      8: { halign: "right" },
-      9: { halign: "center", cellWidth: 10 },
-      10: { halign: "right", cellWidth: 14 },
+      0: { halign: "center", cellWidth: columnWidths[0] },
+      1: { halign: "center", cellWidth: columnWidths[1] },
+      2: { cellWidth: columnWidths[2] },
+      3: { cellWidth: columnWidths[3] },
+      4: { cellWidth: columnWidths[4] },
+      5: { halign: "center", cellWidth: columnWidths[5] },
+      6: { halign: "center", cellWidth: columnWidths[6] },
+      7: { halign: "center", cellWidth: columnWidths[7] },
+      8: { halign: "right", cellWidth: columnWidths[8] },
+      9: { halign: "center", cellWidth: columnWidths[9] },
+      10: { halign: "right", cellWidth: columnWidths[10] },
     },
     didParseCell: (data) => {
+      data.cell.styles.textColor = BLACK;
+      data.cell.styles.lineColor = BLACK;
+
+      if (data.section === "head" || data.section === "foot") {
+        data.cell.styles.fillColor = WHITE;
+        return;
+      }
+
       if (data.section !== "body") {
         return;
       }
-      data.cell.styles.textColor = BLACK;
-      data.cell.styles.lineColor = BLACK;
 
       if (!highlightIssueRows) {
         data.cell.styles.fillColor = WHITE;
@@ -282,7 +313,7 @@ export function exportInvoiceToPdf(
         data.cell.styles.fillColor = ISSUE_YELLOW;
       }
     },
-    margin: { left: margin, right: margin },
+    margin: { left: margin, right: margin, top: 8, bottom: 12 },
     showHead: "everyPage",
     showFoot: "lastPage",
   });
