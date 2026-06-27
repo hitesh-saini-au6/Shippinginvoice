@@ -1,5 +1,5 @@
 import { clients } from "@/config/invoiceSettings";
-import { filterByPickupDate } from "@/services/invoice/dateFilter";
+import { filterByPickupDate, sortByPickupDate } from "@/services/invoice/dateFilter";
 import { lookupPincode } from "@/services/invoice/pincodeLookup";
 import { calculateFreightAmount } from "@/services/invoice/rateCalculator";
 import { buildInvoiceSummary } from "@/services/invoice/validation";
@@ -61,7 +61,9 @@ export function buildInvoice(
   invoiceNumber?: string,
 ): GeneratedInvoice {
   const client = clients.find((item) => item.id === clientId) ?? clients[0];
-  const filtered = filterByPickupDate(shipments, billingFrom, billingTo);
+  const filtered = sortByPickupDate(
+    filterByPickupDate(shipments, billingFrom, billingTo),
+  );
 
   const lines: InvoiceLine[] = filtered.map((shipment, index) => {
     const pincodeLookup = lookupPincode(pincodeMaster, shipment.pincode);
