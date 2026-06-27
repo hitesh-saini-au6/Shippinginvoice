@@ -59,6 +59,8 @@ export interface GeneratedInvoice {
   clientName: string;
   supplierName: string;
   supplierGstin: string;
+  buyerName: string;
+  buyerGstin: string;
   billingFrom: Date;
   billingTo: Date;
   invoiceDate: Date;
@@ -71,6 +73,8 @@ export interface InvoiceBuildOptions {
   invoiceNumber?: string;
   supplierName: string;
   supplierGstin: string;
+  buyerName: string;
+  buyerGstin: string;
   invoiceDate?: Date;
 }
 

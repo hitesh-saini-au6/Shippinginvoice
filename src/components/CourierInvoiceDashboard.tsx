@@ -59,6 +59,8 @@ const formSchema = z
     invoiceNumber: z.string().optional(),
     supplierName: z.string().min(1, "Supplier name is required"),
     supplierGstin: z.string().min(1, "Supplier GST is required"),
+    buyerName: z.string().min(1, "Buyer name is required"),
+    buyerGstin: z.string().min(1, "Buyer GST is required"),
   })
   .refine((data) => new Date(data.billingFrom) <= new Date(data.billingTo), {
     message: "Billing from date must be on or before billing to date",
@@ -66,6 +68,14 @@ const formSchema = z
   });
 
 type FormValues = z.infer<typeof formSchema>;
+
+function getClientDefaults(clientId: string) {
+  const client = clients.find((item) => item.id === clientId) ?? clients[0];
+  return {
+    buyerName: client?.name ?? "",
+    buyerGstin: client?.gstin ?? "",
+  };
+}
 
 export function CourierInvoiceDashboard() {
   const [pincodeMaster, setPincodeMaster] = useState<PincodeMaster | null>(null);
@@ -99,12 +109,20 @@ export function CourierInvoiceDashboard() {
       invoiceNumber: "",
       supplierName: businessDetails.name,
       supplierGstin: businessDetails.gstin,
+      buyerName: getClientDefaults(clients[0]?.id ?? "").buyerName,
+      buyerGstin: getClientDefaults(clients[0]?.id ?? "").buyerGstin,
     },
   });
 
   const clientId = watch("clientId");
   const billingFrom = watch("billingFrom");
   const billingTo = watch("billingTo");
+
+  useEffect(() => {
+    const defaults = getClientDefaults(clientId);
+    setValue("buyerName", defaults.buyerName, { shouldValidate: true });
+    setValue("buyerGstin", defaults.buyerGstin, { shouldValidate: true });
+  }, [clientId, setValue]);
 
   useEffect(() => {
     loadPincodeMaster()
@@ -155,6 +173,9 @@ export function CourierInvoiceDashboard() {
         setValue("invoiceNumber", "", { shouldValidate: true });
         setValue("supplierName", businessDetails.name, { shouldValidate: true });
         setValue("supplierGstin", businessDetails.gstin, { shouldValidate: true });
+        const buyerDefaults = getClientDefaults(clientId);
+        setValue("buyerName", buyerDefaults.buyerName, { shouldValidate: true });
+        setValue("buyerGstin", buyerDefaults.buyerGstin, { shouldValidate: true });
 
         setUploadMessage(
           `Loaded ${result.shipments.length} shipments from ${file.name}.${dateRange ? ` Billing dates set to ${dateRange.from} → ${dateRange.to} (pickup date range).` : ""} Now click Generate Invoice.`,
@@ -170,7 +191,7 @@ export function CourierInvoiceDashboard() {
         event.target.value = "";
       }
     },
-    [setValue],
+    [setValue, clientId],
   );
 
   const onGenerate = handleSubmit((values) => {
@@ -210,6 +231,8 @@ export function CourierInvoiceDashboard() {
         invoiceNumber: values.invoiceNumber,
         supplierName: values.supplierName,
         supplierGstin: values.supplierGstin,
+        buyerName: values.buyerName,
+        buyerGstin: values.buyerGstin,
       },
     );
 
@@ -462,51 +485,89 @@ export function CourierInvoiceDashboard() {
       {showInvoiceDetails && (
         <Card>
           <CardHeader>
-            <CardTitle>Invoice Details</CardTitle>
+            <CardTitle>Invoice & Party Details</CardTitle>
             <CardDescription>
-              Enter invoice number and supplier (your business) details for
-              Excel and PDF export.
+              Set invoice number, supplier (your business), and buyer (client)
+              details for Excel and PDF export.
             </CardDescription>
           </CardHeader>
-          <CardContent className="grid gap-6 md:grid-cols-3">
-            <div className="space-y-2">
-              <Label htmlFor="invoice-number">Invoice No</Label>
-              <Input
-                id="invoice-number"
-                placeholder="e.g. 998"
-                {...register("invoiceNumber")}
-              />
-              <p className="text-xs text-muted-foreground">
-                Leave blank to auto-generate
-              </p>
+          <CardContent className="space-y-6">
+            <div>
+              <p className="mb-3 text-sm font-medium">Supplier (You)</p>
+              <div className="grid gap-6 md:grid-cols-3">
+                <div className="space-y-2">
+                  <Label htmlFor="invoice-number">Invoice No</Label>
+                  <Input
+                    id="invoice-number"
+                    placeholder="e.g. 998"
+                    {...register("invoiceNumber")}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Leave blank to auto-generate
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="supplier-name">Supplier Name</Label>
+                  <Input
+                    id="supplier-name"
+                    placeholder="Your business name"
+                    {...register("supplierName")}
+                  />
+                  {errors.supplierName && (
+                    <p className="text-sm text-destructive">
+                      {errors.supplierName.message}
+                    </p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="supplier-gstin">Supplier GSTIN</Label>
+                  <Input
+                    id="supplier-gstin"
+                    placeholder="e.g. 08BCNPT9914J1ZQ"
+                    {...register("supplierGstin")}
+                  />
+                  {errors.supplierGstin && (
+                    <p className="text-sm text-destructive">
+                      {errors.supplierGstin.message}
+                    </p>
+                  )}
+                </div>
+              </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="supplier-name">Supplier Name</Label>
-              <Input
-                id="supplier-name"
-                placeholder="Your business name"
-                {...register("supplierName")}
-              />
-              {errors.supplierName && (
-                <p className="text-sm text-destructive">
-                  {errors.supplierName.message}
-                </p>
-              )}
-            </div>
+            <div>
+              <p className="mb-3 text-sm font-medium">Buyer (Client)</p>
+              <div className="grid gap-6 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="buyer-name">Buyer Name</Label>
+                  <Input
+                    id="buyer-name"
+                    placeholder="Client / buyer name"
+                    {...register("buyerName")}
+                  />
+                  {errors.buyerName && (
+                    <p className="text-sm text-destructive">
+                      {errors.buyerName.message}
+                    </p>
+                  )}
+                </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="supplier-gstin">Supplier GSTIN</Label>
-              <Input
-                id="supplier-gstin"
-                placeholder="e.g. 08BCNPT9914J1ZQ"
-                {...register("supplierGstin")}
-              />
-              {errors.supplierGstin && (
-                <p className="text-sm text-destructive">
-                  {errors.supplierGstin.message}
-                </p>
-              )}
+                <div className="space-y-2">
+                  <Label htmlFor="buyer-gstin">Buyer GSTIN</Label>
+                  <Input
+                    id="buyer-gstin"
+                    placeholder="e.g. 08KLFPS2205R2ZC"
+                    {...register("buyerGstin")}
+                  />
+                  {errors.buyerGstin && (
+                    <p className="text-sm text-destructive">
+                      {errors.buyerGstin.message}
+                    </p>
+                  )}
+                </div>
+              </div>
             </div>
           </CardContent>
         </Card>

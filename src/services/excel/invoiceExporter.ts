@@ -156,7 +156,7 @@ function buildHeaderSection(
   }
 
   setCell(sheet, 10, 1, "Buyer", { bold: true });
-  setCell(sheet, 11, 1, client.name, { bold: true });
+  setCell(sheet, 11, 1, invoice.buyerName, { bold: true });
   setCell(sheet, 12, 1, client.addressLine);
   setCell(
     sheet,
@@ -164,7 +164,7 @@ function buildHeaderSection(
     1,
     `${client.city} - ${client.pincode} ${client.state}. India.`,
   );
-  setCell(sheet, 14, 1, `GSTIN/UIN:- ${client.gstin}`);
+  setCell(sheet, 14, 1, `GSTIN/UIN:- ${invoice.buyerGstin}`);
   setCell(
     sheet,
     15,
@@ -220,7 +220,7 @@ function buildHeaderSection(
 
   const stripRow = dueRow + 2;
   setCell(sheet, stripRow, 1, "Customer Name :", { bold: true });
-  setCell(sheet, stripRow, 2, client.name);
+  setCell(sheet, stripRow, 2, invoice.buyerName);
   setCell(sheet, stripRow, 4, "Invoice No :", { bold: true });
   setCell(sheet, stripRow, 5, invoice.invoiceNumber);
   setCell(sheet, stripRow, 7, "Invoice Date :", { bold: true });

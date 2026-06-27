@@ -103,9 +103,11 @@ export function buildInvoice(
 
   return {
     clientId: client.id,
-    clientName: client.name,
+    clientName: options.buyerName.trim(),
     supplierName: options.supplierName.trim(),
     supplierGstin: options.supplierGstin.trim(),
+    buyerName: options.buyerName.trim(),
+    buyerGstin: options.buyerGstin.trim(),
     billingFrom,
     billingTo,
     invoiceDate,

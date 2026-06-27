@@ -191,7 +191,7 @@ export function exportInvoiceToPdf(
   doc.setFont("helvetica", "bold");
   doc.text("Buyer", margin, y);
   y += 3;
-  doc.text(client.name, margin, y);
+  doc.text(invoice.buyerName, margin, y);
   y += 3;
   doc.setFont("helvetica", "normal");
   doc.text(client.addressLine, margin, y);
@@ -202,7 +202,7 @@ export function exportInvoiceToPdf(
     y,
   );
   y += 3;
-  doc.text(`GSTIN/UIN:- ${client.gstin}`, margin, y);
+  doc.text(`GSTIN/UIN:- ${invoice.buyerGstin}`, margin, y);
   y += 4;
 
   doc.setFont("helvetica", "bold");
@@ -245,7 +245,7 @@ export function exportInvoiceToPdf(
   doc.setFont("helvetica", "bold");
   setBlackText(doc);
   doc.text(
-    `Customer: ${client.name}   Invoice No: ${invoice.invoiceNumber}   Date: ${formatInvoiceDate(invoice.invoiceDate)}   Amount: ${formatCurrency(summary.gst.totalInvoiceValue)}`,
+    `Customer: ${invoice.buyerName}   Invoice No: ${invoice.invoiceNumber}   Date: ${formatInvoiceDate(invoice.invoiceDate)}   Amount: ${formatCurrency(summary.gst.totalInvoiceValue)}`,
     margin,
     y,
     { maxWidth: tableWidth },
