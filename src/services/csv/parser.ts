@@ -1,13 +1,6 @@
 import Papa from "papaparse";
-import { cleanCsvValue } from "@/utils/csvValue";
-import { parseDelhiveryDate } from "@/utils/date";
-import { parseWeightGrams } from "@/utils/weight";
-import {
-  getMissingColumns,
-  REQUIRED_COLUMN_LABELS,
-  resolveColumnMapping,
-} from "@/services/csv/columnMap";
-import type { CsvParseResult, DelhiveryShipment } from "@/types";
+import { parseDelhiveryRows } from "@/services/csv/rowParser";
+import type { CsvParseResult } from "@/types";
 
 export function parseDelhiveryCsv(fileContent: string): CsvParseResult {
   const parsed = Papa.parse<Record<string, string>>(fileContent, {
@@ -23,48 +16,29 @@ export function parseDelhiveryCsv(fileContent: string): CsvParseResult {
   }
 
   const headers = parsed.meta.fields ?? [];
-  const missing = getMissingColumns(headers);
+  return parseDelhiveryRows(headers, parsed.data);
+}
 
-  if (missing.length > 0) {
-    const labels = missing.map(
-      (field) => REQUIRED_COLUMN_LABELS[field as keyof typeof REQUIRED_COLUMN_LABELS],
-    );
-    return {
-      shipments: [],
-      errors: [`Missing required columns: ${labels.join(", ")}`],
-    };
+export async function parseDelhiveryFile(
+  file: File,
+): Promise<CsvParseResult> {
+  const extension = file.name.split(".").pop()?.toLowerCase();
+
+  if (extension === "xlsx" || extension === "xlsm") {
+    const buffer = await file.arrayBuffer();
+    const { parseDelhiveryXlsx } = await import("@/services/csv/xlsxParser");
+    return parseDelhiveryXlsx(buffer);
   }
 
-  const mapping = resolveColumnMapping(headers);
-  if (!mapping) {
-    return {
-      shipments: [],
-      errors: ["Unable to map required CSV columns."],
-    };
+  if (extension === "csv" || extension === "txt") {
+    const content = await file.text();
+    return parseDelhiveryCsv(content);
   }
 
-  const shipments: DelhiveryShipment[] = [];
-
-  for (const row of parsed.data) {
-    const pickupDateRaw = cleanCsvValue(row[mapping.pickupDate]);
-    const pickupDate = parseDelhiveryDate(pickupDateRaw);
-
-    if (!pickupDate) {
-      continue;
-    }
-
-    shipments.push({
-      waybillNumber: cleanCsvValue(row[mapping.waybillNumber]),
-      pickupDate,
-      chargedWeightGrams: parseWeightGrams(
-        cleanCsvValue(row[mapping.chargedWeight]),
-      ),
-      zone: cleanCsvValue(row[mapping.zone]),
-      pincode: cleanCsvValue(row[mapping.pincode]),
-      orderId: cleanCsvValue(row[mapping.orderId]),
-      rawRow: { ...row },
-    });
-  }
-
-  return { shipments, errors: [] };
+  return {
+    shipments: [],
+    errors: [
+      "Unsupported file type. Please upload a Delhivery billing CSV or Excel (.xlsx) file.",
+    ],
+  };
 }

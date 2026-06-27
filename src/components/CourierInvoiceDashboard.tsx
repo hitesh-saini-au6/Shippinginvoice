@@ -33,7 +33,7 @@ import {
 } from "@/components/ui/table";
 import { clients } from "@/config/invoiceSettings";
 import { loadPincodeMaster } from "@/config/pincodeMaster";
-import { parseDelhiveryCsv } from "@/services/csv/parser";
+import { parseDelhiveryFile } from "@/services/csv/parser";
 import {
   exportInvoiceToExcel,
   getInvoiceFilename,
@@ -41,7 +41,8 @@ import {
 import { buildInvoice } from "@/services/invoice/invoiceBuilder";
 import { hasLineIssues } from "@/services/invoice/validation";
 import { formatCurrency } from "@/utils/currency";
-import { formatPickupDate, toInputDateValue } from "@/utils/date";
+import { formatPickupDate } from "@/utils/date";
+import { applyPickupDateRangeToForm } from "@/utils/shipmentDates";
 import { formatWeightGrams } from "@/utils/weight";
 import type {
   DelhiveryShipment,
@@ -55,24 +56,26 @@ const formSchema = z
     billingFrom: z.string().min(1, "Billing from date is required"),
     billingTo: z.string().min(1, "Billing to date is required"),
   })
-  .refine(
-    (data) => new Date(data.billingFrom) <= new Date(data.billingTo),
-    {
-      message: "Billing from date must be on or before billing to date",
-      path: ["billingTo"],
-    },
-  );
+  .refine((data) => new Date(data.billingFrom) <= new Date(data.billingTo), {
+    message: "Billing from date must be on or before billing to date",
+    path: ["billingTo"],
+  });
 
 type FormValues = z.infer<typeof formSchema>;
 
 export function CourierInvoiceDashboard() {
   const [pincodeMaster, setPincodeMaster] = useState<PincodeMaster | null>(null);
+  const [masterLoading, setMasterLoading] = useState(true);
   const [masterError, setMasterError] = useState<string | null>(null);
   const [csvFileName, setCsvFileName] = useState<string | null>(null);
   const [shipments, setShipments] = useState<DelhiveryShipment[]>([]);
   const [csvErrors, setCsvErrors] = useState<string[]>([]);
+  const [uploadMessage, setUploadMessage] = useState<string | null>(null);
   const [invoice, setInvoice] = useState<GeneratedInvoice | null>(null);
   const [generateError, setGenerateError] = useState<string | null>(null);
+  const [generateInfo, setGenerateInfo] = useState<string | null>(null);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
 
   const {
@@ -85,18 +88,26 @@ export function CourierInvoiceDashboard() {
     resolver: zodResolver(formSchema),
     defaultValues: {
       clientId: clients[0]?.id ?? "",
-      billingFrom: toInputDateValue(new Date()),
-      billingTo: toInputDateValue(new Date()),
+      billingFrom: "",
+      billingTo: "",
     },
   });
 
   const clientId = watch("clientId");
+  const billingFrom = watch("billingFrom");
+  const billingTo = watch("billingTo");
 
   useEffect(() => {
     loadPincodeMaster()
-      .then(setPincodeMaster)
+      .then((master) => {
+        setPincodeMaster(master);
+        setMasterLoading(false);
+      })
       .catch(() => {
-        setMasterError("Failed to load pincode master. Please refresh the page.");
+        setMasterError(
+          "Failed to load pincode master. Please refresh the page.",
+        );
+        setMasterLoading(false);
       });
   }, []);
 
@@ -107,59 +118,121 @@ export function CourierInvoiceDashboard() {
         return;
       }
 
-      const content = await file.text();
-      const result = parseDelhiveryCsv(content);
-
-      setCsvFileName(file.name);
-      setShipments(result.shipments);
-      setCsvErrors(result.errors);
-      setInvoice(null);
+      setIsUploading(true);
+      setCsvErrors([]);
+      setUploadMessage(null);
       setGenerateError(null);
+      setGenerateInfo(null);
+      setDownloadError(null);
+      setInvoice(null);
+
+      try {
+        const result = await parseDelhiveryFile(file);
+
+        setCsvFileName(file.name);
+        setShipments(result.shipments);
+        setCsvErrors(result.errors);
+
+        if (result.errors.length > 0) {
+          setUploadMessage(null);
+          return;
+        }
+
+        const dateRange = applyPickupDateRangeToForm(
+          result.shipments,
+          (field, value) => setValue(field, value, { shouldValidate: true }),
+        );
+
+        setUploadMessage(
+          `Loaded ${result.shipments.length} shipments from ${file.name}.${dateRange ? ` Billing dates set to ${dateRange.from} → ${dateRange.to} (pickup date range).` : ""} Now click Generate Invoice.`,
+        );
+      } catch {
+        setCsvErrors([
+          "Failed to read the uploaded file. Use Delhivery billing CSV or .xlsx.",
+        ]);
+        setShipments([]);
+        setCsvFileName(null);
+      } finally {
+        setIsUploading(false);
+        event.target.value = "";
+      }
     },
-    [],
+    [setValue],
   );
 
   const onGenerate = handleSubmit((values) => {
+    setGenerateError(null);
+    setGenerateInfo(null);
+    setDownloadError(null);
+
+    if (masterLoading) {
+      setGenerateError("Pincode master is still loading. Please wait a moment.");
+      return;
+    }
+
     if (!pincodeMaster) {
-      setGenerateError("Pincode master is still loading. Please wait.");
+      setGenerateError("Pincode master failed to load. Please refresh the page.");
       return;
     }
 
     if (csvErrors.length > 0) {
-      setGenerateError("Fix CSV errors before generating the invoice.");
+      setGenerateError("Fix file errors before generating the invoice.");
       return;
     }
 
     if (shipments.length === 0) {
-      setGenerateError("Upload a Delhivery CSV with shipment data first.");
+      setGenerateError(
+        "Upload a Delhivery billing file first (CSV or Excel .xlsx).",
+      );
       return;
     }
 
-    setGenerateError(null);
     const generated = buildInvoice(
       shipments,
       pincodeMaster,
-      new Date(values.billingFrom),
-      new Date(values.billingTo),
+      new Date(`${values.billingFrom}T00:00:00`),
+      new Date(`${values.billingTo}T23:59:59`),
       values.clientId,
     );
+
     setInvoice(generated);
+
+    if (generated.lines.length === 0) {
+      setGenerateInfo(
+        `No shipments have pickup dates between ${values.billingFrom} and ${values.billingTo}. Adjust the billing dates — your file has ${shipments.length} total shipments.`,
+      );
+      return;
+    }
+
+    setGenerateInfo(
+      `Invoice ready: ${generated.summary.totalShipments} shipments, freight ${formatCurrency(generated.summary.totalFreight)}, total with GST ${formatCurrency(generated.summary.gst.totalInvoiceValue)}. Click Download Excel.`,
+    );
   });
 
   const handleDownload = async () => {
-    if (!invoice) {
+    if (!invoice || invoice.lines.length === 0) {
+      setDownloadError("Generate an invoice with at least one shipment first.");
       return;
     }
 
     setIsDownloading(true);
+    setDownloadError(null);
+
     try {
       const blob = await exportInvoiceToExcel(invoice);
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = url;
       anchor.download = getInvoiceFilename(invoice);
+      document.body.appendChild(anchor);
       anchor.click();
+      document.body.removeChild(anchor);
       URL.revokeObjectURL(url);
+      setGenerateInfo(`Downloaded ${getInvoiceFilename(invoice)}`);
+    } catch {
+      setDownloadError(
+        "Excel download failed. Try again or use a desktop browser (Chrome/Edge).",
+      );
     } finally {
       setIsDownloading(false);
     }
@@ -170,6 +243,14 @@ export function CourierInvoiceDashboard() {
     [invoice],
   );
 
+  const canGenerate =
+    !masterLoading &&
+    !isUploading &&
+    shipments.length > 0 &&
+    csvErrors.length === 0 &&
+    billingFrom &&
+    billingTo;
+
   return (
     <div className="mx-auto flex min-h-screen max-w-7xl flex-col gap-6 p-6">
       <div>
@@ -177,10 +258,34 @@ export function CourierInvoiceDashboard() {
           Courier Invoice Generator
         </h1>
         <p className="mt-1 text-muted-foreground">
-          Upload Delhivery billing CSV, filter by pickup date, and generate a
+          Upload Delhivery billing CSV or Excel, filter by pickup date, generate
           GST invoice for Sivayii.
         </p>
       </div>
+
+      <Card className="border-dashed">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">How to use</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-2 text-sm text-muted-foreground md:grid-cols-4">
+          <p>
+            <strong className="text-foreground">1.</strong> Upload Delhivery
+            billing file (.csv or .xlsx)
+          </p>
+          <p>
+            <strong className="text-foreground">2.</strong> Check billing
+            dates (auto-filled from pickup dates)
+          </p>
+          <p>
+            <strong className="text-foreground">3.</strong> Click{" "}
+            <strong className="text-foreground">Generate Invoice</strong>
+          </p>
+          <p>
+            <strong className="text-foreground">4.</strong> Click{" "}
+            <strong className="text-foreground">Download Excel</strong>
+          </p>
+        </CardContent>
+      </Card>
 
       {masterError && (
         <Alert variant="destructive">
@@ -194,20 +299,29 @@ export function CourierInvoiceDashboard() {
           <CardTitle>Invoice Inputs</CardTitle>
           <CardDescription>
             All processing happens locally in your browser.
+            {masterLoading && " Loading pincode master..."}
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-6 md:grid-cols-2">
           <div className="space-y-2">
-            <Label htmlFor="csv-upload">Upload Delhivery CSV</Label>
+            <Label htmlFor="csv-upload">Upload Delhivery CSV or Excel</Label>
             <Input
               id="csv-upload"
               type="file"
-              accept=".csv,text/csv"
+              accept=".csv,.xlsx,.xlsm,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
               onChange={handleFileUpload}
+              disabled={isUploading}
             />
-            {csvFileName && (
-              <p className="text-sm text-muted-foreground">
-                Loaded: {csvFileName} ({shipments.length} shipments)
+            <p className="text-xs text-muted-foreground">
+              Accepts .csv and .xlsx from Delhivery billing (not your manual
+              invoice PDF).
+            </p>
+            {isUploading && (
+              <p className="text-sm text-muted-foreground">Reading file...</p>
+            )}
+            {csvFileName && !isUploading && (
+              <p className="text-sm font-medium text-foreground">
+                File: {csvFileName} · {shipments.length} shipments in file
               </p>
             )}
           </div>
@@ -236,7 +350,7 @@ export function CourierInvoiceDashboard() {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="billing-from">Billing From Date</Label>
+            <Label htmlFor="billing-from">Billing From Date (Pickup Date)</Label>
             <Input id="billing-from" type="date" {...register("billingFrom")} />
             {errors.billingFrom && (
               <p className="text-sm text-destructive">
@@ -246,7 +360,7 @@ export function CourierInvoiceDashboard() {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="billing-to">Billing To Date</Label>
+            <Label htmlFor="billing-to">Billing To Date (Pickup Date)</Label>
             <Input id="billing-to" type="date" {...register("billingTo")} />
             {errors.billingTo && (
               <p className="text-sm text-destructive">
@@ -256,13 +370,13 @@ export function CourierInvoiceDashboard() {
           </div>
 
           <div className="md:col-span-2 flex flex-wrap gap-3">
-            <Button type="button" onClick={onGenerate}>
+            <Button type="button" onClick={onGenerate} disabled={!canGenerate}>
               Generate Invoice
             </Button>
             <Button
               type="button"
               variant="outline"
-              disabled={!invoice || isDownloading}
+              disabled={!invoice || invoice.lines.length === 0 || isDownloading}
               onClick={handleDownload}
             >
               {isDownloading ? "Preparing..." : "Download Excel"}
@@ -271,9 +385,16 @@ export function CourierInvoiceDashboard() {
         </CardContent>
       </Card>
 
+      {uploadMessage && (
+        <Alert>
+          <AlertTitle>File loaded</AlertTitle>
+          <AlertDescription>{uploadMessage}</AlertDescription>
+        </Alert>
+      )}
+
       {csvErrors.length > 0 && (
         <Alert variant="destructive">
-          <AlertTitle>CSV error</AlertTitle>
+          <AlertTitle>File error</AlertTitle>
           <AlertDescription>{csvErrors.join(" ")}</AlertDescription>
         </Alert>
       )}
@@ -285,14 +406,34 @@ export function CourierInvoiceDashboard() {
         </Alert>
       )}
 
+      {generateInfo && (
+        <Alert>
+          <AlertTitle>Status</AlertTitle>
+          <AlertDescription>{generateInfo}</AlertDescription>
+        </Alert>
+      )}
+
+      {downloadError && (
+        <Alert variant="destructive">
+          <AlertTitle>Download error</AlertTitle>
+          <AlertDescription>{downloadError}</AlertDescription>
+        </Alert>
+      )}
+
       {invoice && (
         <Card>
           <CardHeader>
             <CardTitle>Invoice Preview</CardTitle>
             <CardDescription>
-              {invoice.summary.totalShipments} shipments · Freight{" "}
-              {formatCurrency(invoice.summary.totalFreight)} · GST invoice{" "}
-              {formatCurrency(invoice.summary.gst.totalInvoiceValue)}
+              {invoice.summary.totalShipments} shipments in selected period
+              {invoice.summary.totalShipments > 0 && (
+                <>
+                  {" "}
+                  · Freight {formatCurrency(invoice.summary.totalFreight)} ·
+                  GST invoice{" "}
+                  {formatCurrency(invoice.summary.gst.totalInvoiceValue)}
+                </>
+              )}
               {issueCount > 0 && (
                 <Badge variant="outline" className="ml-2">
                   {issueCount} rows with issues
@@ -321,8 +462,10 @@ export function CourierInvoiceDashboard() {
                 <TableBody>
                   {invoice.lines.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={11} className="text-center">
-                        No shipments found for the selected billing period.
+                      <TableCell colSpan={11} className="py-8 text-center">
+                        No shipments in this billing period. Widen the date
+                        range — your uploaded file has {shipments.length}{" "}
+                        shipments total.
                       </TableCell>
                     </TableRow>
                   ) : (
@@ -359,38 +502,42 @@ export function CourierInvoiceDashboard() {
               </Table>
             </div>
 
-            <div className="flex flex-wrap gap-6 rounded-md border bg-muted/40 p-4 text-sm">
-              <div>
-                <span className="text-muted-foreground">Total Shipments</span>
-                <p className="text-lg font-semibold">
-                  {invoice.summary.totalShipments}
-                </p>
+            {invoice.lines.length > 0 && (
+              <div className="flex flex-wrap gap-6 rounded-md border bg-muted/40 p-4 text-sm">
+                <div>
+                  <span className="text-muted-foreground">Total Shipments</span>
+                  <p className="text-lg font-semibold">
+                    {invoice.summary.totalShipments}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Total Freight</span>
+                  <p className="text-lg font-semibold">
+                    {formatCurrency(invoice.summary.totalFreight)}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">SGST @ 9%</span>
+                  <p className="text-lg font-semibold">
+                    {formatCurrency(invoice.summary.gst.sgstAmount)}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">CGST @ 9%</span>
+                  <p className="text-lg font-semibold">
+                    {formatCurrency(invoice.summary.gst.cgstAmount)}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">
+                    Total Invoice Value
+                  </span>
+                  <p className="text-lg font-semibold">
+                    {formatCurrency(invoice.summary.gst.totalInvoiceValue)}
+                  </p>
+                </div>
               </div>
-              <div>
-                <span className="text-muted-foreground">Total Freight</span>
-                <p className="text-lg font-semibold">
-                  {formatCurrency(invoice.summary.totalFreight)}
-                </p>
-              </div>
-              <div>
-                <span className="text-muted-foreground">SGST @ 9%</span>
-                <p className="text-lg font-semibold">
-                  {formatCurrency(invoice.summary.gst.sgstAmount)}
-                </p>
-              </div>
-              <div>
-                <span className="text-muted-foreground">CGST @ 9%</span>
-                <p className="text-lg font-semibold">
-                  {formatCurrency(invoice.summary.gst.cgstAmount)}
-                </p>
-              </div>
-              <div>
-                <span className="text-muted-foreground">Total Invoice Value</span>
-                <p className="text-lg font-semibold">
-                  {formatCurrency(invoice.summary.gst.totalInvoiceValue)}
-                </p>
-              </div>
-            </div>
+            )}
           </CardContent>
         </Card>
       )}
