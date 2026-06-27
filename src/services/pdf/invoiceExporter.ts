@@ -51,13 +51,14 @@ function getDestinationColumnWidth(
 function buildTableColumnWidths(
   doc: jsPDF,
   invoice: GeneratedInvoice,
+  tableWidth: number,
 ): Record<number, number> {
   const destinationWidth = getDestinationColumnWidth(
     doc,
     invoice.lines.map((line) => line.destination),
   );
 
-  return {
+  const widths: Record<number, number> = {
     0: 7,
     1: 14,
     2: 28,
@@ -70,6 +71,27 @@ function buildTableColumnWidths(
     9: 8,
     10: 15,
   };
+
+  const baseTotal = Object.values(widths).reduce((sum, width) => sum + width, 0);
+  const extra = tableWidth - baseTotal;
+
+  if (extra > 0) {
+    widths[2] += extra * 0.42;
+    widths[3] += extra * 0.33;
+    widths[1] += extra * 0.1;
+    widths[8] += extra * 0.15;
+  }
+
+  return widths;
+}
+
+function ensureSpace(doc: jsPDF, y: number, needed: number, margin: number): number {
+  const pageHeight = doc.internal.pageSize.getHeight();
+  if (y + needed <= pageHeight - 12) {
+    return y;
+  }
+  doc.addPage();
+  return margin;
 }
 
 function drawSummaryBox(
@@ -216,17 +238,20 @@ export function exportInvoiceToPdf(
   );
   y += 4;
 
+  y = ensureSpace(doc, y, 8, margin);
+
+  doc.setFontSize(7);
   doc.setFont("helvetica", "bold");
-  doc.text(`Customer: ${client.name}`, margin, y);
-  doc.text(`Invoice No: ${invoice.invoiceNumber}`, margin + 70, y);
-  doc.text(`Date: ${formatInvoiceDate(invoice.invoiceDate)}`, margin + 130, y);
+  setBlackText(doc);
   doc.text(
-    `Amount: ${formatCurrency(summary.gst.totalInvoiceValue)}`,
-    pageWidth - margin,
+    `Customer: ${client.name}   Invoice No: ${invoice.invoiceNumber}   Date: ${formatInvoiceDate(invoice.invoiceDate)}   Amount: ${formatCurrency(summary.gst.totalInvoiceValue)}`,
+    margin,
     y,
-    { align: "right" },
+    { maxWidth: pageWidth - margin * 2 },
   );
-  y += 2;
+  y += 4;
+
+  y = ensureSpace(doc, y, 14, margin);
 
   const tableBody = invoice.lines.map((line) => [
     String(line.srNo),
@@ -242,11 +267,8 @@ export function exportInvoiceToPdf(
     line.amount != null ? formatCurrency(line.amount) : "",
   ]);
 
-  const columnWidths = buildTableColumnWidths(doc, invoice);
-  const tableWidth = Object.values(columnWidths).reduce(
-    (total, width) => total + width,
-    0,
-  );
+  const tableWidth = pageWidth - margin * 2;
+  const columnWidths = buildTableColumnWidths(doc, invoice, tableWidth);
 
   autoTable(doc, {
     startY: y,
@@ -346,7 +368,7 @@ export function exportInvoiceToPdf(
         data.cell.styles.fillColor = ISSUE_YELLOW;
       }
     },
-    margin: { left: margin, right: margin, top: 8, bottom: 12 },
+    margin: { left: margin, right: margin, bottom: 12 },
     showHead: "everyPage",
     showFoot: "lastPage",
   });
