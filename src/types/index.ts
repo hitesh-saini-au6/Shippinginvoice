@@ -10,6 +10,14 @@ export interface DelhiveryShipment {
   rawRow: RawCsvRow;
   /** Present when the row was added manually in the UI. */
   manualId?: string;
+  /** Present when the row came from an uploaded Delhivery file batch. */
+  sourceFileId?: string;
+}
+
+export interface UploadedFileBatch {
+  id: string;
+  fileName: string;
+  shipments: DelhiveryShipment[];
 }
 
 export interface PincodeRecord {

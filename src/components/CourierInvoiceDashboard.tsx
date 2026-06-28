@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -34,6 +34,7 @@ import {
 import { ManualShipmentEntry } from "@/components/ManualShipmentEntry";
 import { businessDetails, clients } from "@/config/invoiceSettings";
 import { loadPincodeMaster } from "@/config/pincodeMaster";
+import { dedupeShipments, tagShipmentsForFile } from "@/services/csv/mergeShipments";
 import { parseDelhiveryFile } from "@/services/csv/parser";
 import {
   exportInvoiceToExcel,
@@ -51,6 +52,7 @@ import type {
   DelhiveryShipment,
   GeneratedInvoice,
   PincodeMaster,
+  UploadedFileBatch,
 } from "@/types";
 
 const formSchema = z
@@ -119,8 +121,8 @@ export function CourierInvoiceDashboard() {
   const [pincodeMaster, setPincodeMaster] = useState<PincodeMaster | null>(null);
   const [masterLoading, setMasterLoading] = useState(true);
   const [masterError, setMasterError] = useState<string | null>(null);
-  const [csvFileName, setCsvFileName] = useState<string | null>(null);
-  const [shipments, setShipments] = useState<DelhiveryShipment[]>([]);
+  const [uploadedFiles, setUploadedFiles] = useState<UploadedFileBatch[]>([]);
+  const [manualShipments, setManualShipments] = useState<DelhiveryShipment[]>([]);
   const [csvErrors, setCsvErrors] = useState<string[]>([]);
   const [uploadMessage, setUploadMessage] = useState<string | null>(null);
   const [invoice, setInvoice] = useState<GeneratedInvoice | null>(null);
@@ -131,6 +133,22 @@ export function CourierInvoiceDashboard() {
   const [isDownloadingExcel, setIsDownloadingExcel] = useState(false);
   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
   const [highlightPdfIssues, setHighlightPdfIssues] = useState(false);
+  const addFileInputRef = useRef<HTMLInputElement>(null);
+
+  const { shipments, duplicateShipmentCount } = useMemo(() => {
+    const fromFiles = uploadedFiles.flatMap((batch) => batch.shipments);
+    const dedupedFiles = dedupeShipments(fromFiles);
+    const merged = dedupeShipments([
+      ...dedupedFiles.shipments,
+      ...manualShipments,
+    ]);
+
+    return {
+      shipments: merged.shipments,
+      duplicateShipmentCount:
+        dedupedFiles.duplicatesSkipped + merged.duplicatesSkipped,
+    };
+  }, [uploadedFiles, manualShipments]);
 
   const {
     register,
@@ -182,6 +200,120 @@ export function CourierInvoiceDashboard() {
       });
   }, []);
 
+  const clearInvoiceState = useCallback(() => {
+    setInvoice(null);
+    setGenerateError(null);
+    setGenerateInfo(null);
+    setDownloadError(null);
+  }, []);
+
+  const applyBillingRangeForShipments = useCallback(
+    (nextShipments: DelhiveryShipment[]) => {
+      return applyPickupDateRangeToForm(nextShipments, (field, value) =>
+        setValue(field, value, { shouldValidate: true }),
+      );
+    },
+    [setValue],
+  );
+
+  const processUploadedFile = useCallback(
+    async (file: File, mode: "replace" | "merge") => {
+      setIsUploading(true);
+      setCsvErrors([]);
+      setUploadMessage(null);
+      clearInvoiceState();
+
+      try {
+        const result = await parseDelhiveryFile(file);
+
+        if (result.errors.length > 0) {
+          setCsvErrors(result.errors);
+          setUploadMessage(null);
+          return;
+        }
+
+        const { sourceFileId, shipments: taggedShipments } = tagShipmentsForFile(
+          result.shipments,
+        );
+        const nextBatch: UploadedFileBatch = {
+          id: sourceFileId,
+          fileName: file.name,
+          shipments: taggedShipments,
+        };
+
+        let nextUploadedFiles: UploadedFileBatch[];
+        let nextManualShipments = manualShipments;
+        let duplicatesSkipped = 0;
+
+        if (mode === "replace") {
+          nextUploadedFiles = [nextBatch];
+          nextManualShipments = [];
+          setValue("invoiceNumber", "", { shouldValidate: true });
+          setValue("supplierName", businessDetails.name, {
+            shouldValidate: true,
+          });
+          setValue("supplierGstin", businessDetails.gstin, {
+            shouldValidate: true,
+          });
+          applyBuyerDefaults(getClientDefaults(clientId), setValue);
+        } else {
+          const existingFromFiles = uploadedFiles.flatMap(
+            (batch) => batch.shipments,
+          );
+          const mergeResult = dedupeShipments([
+            ...existingFromFiles,
+            ...taggedShipments,
+          ]);
+          duplicatesSkipped = mergeResult.duplicatesSkipped;
+          nextUploadedFiles = [...uploadedFiles, nextBatch];
+        }
+
+        setUploadedFiles(nextUploadedFiles);
+        setManualShipments(nextManualShipments);
+
+        const combinedShipments = dedupeShipments([
+          ...nextUploadedFiles.flatMap((batch) => batch.shipments),
+          ...nextManualShipments,
+        ]).shipments;
+        const dateRange = applyBillingRangeForShipments(combinedShipments);
+
+        const duplicateNote =
+          duplicatesSkipped > 0
+            ? ` ${duplicatesSkipped} duplicate row(s) skipped (same AWB + pickup date).`
+            : "";
+
+        if (mode === "replace") {
+          setUploadMessage(
+            `Loaded ${result.shipments.length} shipments from ${file.name}.${dateRange ? ` Billing dates set to ${dateRange.from} → ${dateRange.to}.` : ""} Add another file if you have more Excel bills for the same client period.`,
+          );
+          return;
+        }
+
+        setUploadMessage(
+          `Added ${result.shipments.length} shipments from ${file.name}.${duplicateNote} Combined total: ${combinedShipments.length} unique shipments across ${nextUploadedFiles.length} file(s).${dateRange ? ` Billing dates updated to ${dateRange.from} → ${dateRange.to}.` : ""} Click Generate Invoice for one combined bill.`,
+        );
+      } catch {
+        setCsvErrors([
+          "Failed to read the uploaded file. Use Delhivery billing CSV or .xlsx.",
+        ]);
+        if (mode === "replace") {
+          setUploadedFiles([]);
+          setManualShipments([]);
+        }
+      } finally {
+        setIsUploading(false);
+      }
+    },
+    [
+      applyBillingRangeForShipments,
+      clearInvoiceState,
+      clientId,
+      manualShipments,
+      setValue,
+      uploadedFiles,
+    ],
+  );
+
   const handleFileUpload = useCallback(
     async (event: React.ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0];
@@ -189,52 +321,65 @@ export function CourierInvoiceDashboard() {
         return;
       }
 
-      setIsUploading(true);
-      setCsvErrors([]);
-      setUploadMessage(null);
-      setGenerateError(null);
-      setGenerateInfo(null);
-      setDownloadError(null);
-      setInvoice(null);
-
-      try {
-        const result = await parseDelhiveryFile(file);
-
-        setCsvFileName(file.name);
-        setShipments(result.shipments);
-        setCsvErrors(result.errors);
-
-        if (result.errors.length > 0) {
-          setUploadMessage(null);
-          return;
-        }
-
-        const dateRange = applyPickupDateRangeToForm(
-          result.shipments,
-          (field, value) => setValue(field, value, { shouldValidate: true }),
-        );
-
-        setValue("invoiceNumber", "", { shouldValidate: true });
-        setValue("supplierName", businessDetails.name, { shouldValidate: true });
-        setValue("supplierGstin", businessDetails.gstin, { shouldValidate: true });
-        applyBuyerDefaults(getClientDefaults(clientId), setValue);
-
-        setUploadMessage(
-          `Loaded ${result.shipments.length} shipments from ${file.name}.${dateRange ? ` Billing dates set to ${dateRange.from} → ${dateRange.to} (pickup date range).` : ""} Now click Generate Invoice.`,
-        );
-      } catch {
-        setCsvErrors([
-          "Failed to read the uploaded file. Use Delhivery billing CSV or .xlsx.",
-        ]);
-        setShipments([]);
-        setCsvFileName(null);
-      } finally {
-        setIsUploading(false);
-        event.target.value = "";
-      }
+      await processUploadedFile(file, "replace");
+      event.target.value = "";
     },
-    [setValue, clientId],
+    [processUploadedFile],
   );
+
+  const handleAddAnotherFileUpload = useCallback(
+    async (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      if (!file) {
+        return;
+      }
+
+      await processUploadedFile(file, "merge");
+      event.target.value = "";
+    },
+    [processUploadedFile],
+  );
+
+  const handleRemoveUploadedFile = useCallback(
+    (fileId: string) => {
+      const nextUploadedFiles = uploadedFiles.filter((batch) => batch.id !== fileId);
+      setUploadedFiles(nextUploadedFiles);
+      clearInvoiceState();
+
+      const combinedShipments = dedupeShipments([
+        ...nextUploadedFiles.flatMap((batch) => batch.shipments),
+        ...manualShipments,
+      ]).shipments;
+
+      if (combinedShipments.length > 0) {
+        applyBillingRangeForShipments(combinedShipments);
+        setUploadMessage(
+          `Removed file. ${combinedShipments.length} shipment(s) remain across ${nextUploadedFiles.length} file(s). Generate invoice again.`,
+        );
+        return;
+      }
+
+      setManualShipments([]);
+      setUploadMessage(null);
+    },
+    [
+      applyBillingRangeForShipments,
+      clearInvoiceState,
+      manualShipments,
+      uploadedFiles,
+    ],
+  );
+
+  const handleStartNewBill = useCallback(() => {
+    setUploadedFiles([]);
+    setManualShipments([]);
+    setCsvErrors([]);
+    setUploadMessage(null);
+    clearInvoiceState();
+    setValue("billingFrom", "", { shouldValidate: true });
+    setValue("billingTo", "", { shouldValidate: true });
+    setValue("invoiceNumber", "", { shouldValidate: true });
+  }, [clearInvoiceState, setValue]);
 
   const onGenerate = handleSubmit((values) => {
     setGenerateError(null);
@@ -363,11 +508,11 @@ export function CourierInvoiceDashboard() {
     billingTo;
 
   const showInvoiceDetails = shipments.length > 0 && csvErrors.length === 0;
-  const manualShipmentCount = useMemo(
-    () => shipments.filter((shipment) => shipment.manualId).length,
-    [shipments],
+  const manualShipmentCount = manualShipments.length;
+  const uploadedShipmentCount = useMemo(
+    () => uploadedFiles.reduce((total, batch) => total + batch.shipments.length, 0),
+    [uploadedFiles],
   );
-  const uploadedShipmentCount = shipments.length - manualShipmentCount;
 
   return (
     <div className="mx-auto flex min-h-screen max-w-7xl flex-col gap-6 p-6">
@@ -385,30 +530,34 @@ export function CourierInvoiceDashboard() {
         <CardHeader className="pb-3">
           <CardTitle className="text-base">How to use</CardTitle>
         </CardHeader>
-        <CardContent className="grid gap-2 text-sm text-muted-foreground md:grid-cols-6">
+        <CardContent className="grid gap-2 text-sm text-muted-foreground md:grid-cols-7">
           <p>
             <strong className="text-foreground">1.</strong> Upload Delhivery
             billing file (.csv or .xlsx)
           </p>
           <p>
-            <strong className="text-foreground">2.</strong> Add any missing row
+            <strong className="text-foreground">2.</strong> Add more Excel files
+            if needed (same client period)
+          </p>
+          <p>
+            <strong className="text-foreground">3.</strong> Add any missing row
             manually (optional)
           </p>
           <p>
-            <strong className="text-foreground">3.</strong> Check billing dates
+            <strong className="text-foreground">4.</strong> Check billing dates
             (auto-filled from pickup dates)
           </p>
           <p>
-            <strong className="text-foreground">4.</strong> Click{" "}
+            <strong className="text-foreground">5.</strong> Click{" "}
             <strong className="text-foreground">Generate Invoice</strong>
           </p>
           <p>
-            <strong className="text-foreground">5.</strong> Download{" "}
+            <strong className="text-foreground">6.</strong> Download{" "}
             <strong className="text-foreground">Excel</strong> or{" "}
             <strong className="text-foreground">PDF</strong>
           </p>
           <p>
-            <strong className="text-foreground">6.</strong> Print PDF directly
+            <strong className="text-foreground">7.</strong> Print PDF directly
             for bills
           </p>
         </CardContent>
@@ -430,7 +579,7 @@ export function CourierInvoiceDashboard() {
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-6 md:grid-cols-2">
-          <div className="space-y-2">
+          <div className="space-y-2 md:col-span-2">
             <Label htmlFor="csv-upload">Upload Delhivery CSV or Excel</Label>
             <Input
               id="csv-upload"
@@ -440,19 +589,79 @@ export function CourierInvoiceDashboard() {
               disabled={isUploading}
             />
             <p className="text-xs text-muted-foreground">
-              Accepts .csv and .xlsx from Delhivery billing (not your manual
-              invoice PDF).
+              Upload your first Delhivery billing file. Use{" "}
+              <strong>Add another file</strong> below to combine multiple Excel
+              bills into one invoice (e.g. 26 May–30 May + 1 June–13 June).
             </p>
+            {uploadedFiles.length > 0 && (
+              <div className="space-y-2 rounded-md border bg-muted/30 p-3">
+                <p className="text-sm font-medium text-foreground">
+                  Loaded files ({uploadedFiles.length})
+                </p>
+                <ul className="space-y-1 text-sm">
+                  {uploadedFiles.map((batch) => (
+                    <li
+                      key={batch.id}
+                      className="flex flex-wrap items-center justify-between gap-2"
+                    >
+                      <span>
+                        {batch.fileName} · {batch.shipments.length} rows
+                      </span>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleRemoveUploadedFile(batch.id)}
+                      >
+                        Remove
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+                <p className="text-sm font-medium text-foreground">
+                  {uploadedShipmentCount} rows from files
+                  {duplicateShipmentCount > 0
+                    ? ` · ${shipments.length - manualShipmentCount} unique`
+                    : ""}
+                  {manualShipmentCount > 0
+                    ? ` · ${manualShipmentCount} added manually`
+                    : ""}
+                  {duplicateShipmentCount > 0
+                    ? ` · ${duplicateShipmentCount} duplicate(s) skipped`
+                    : ""}
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={isUploading}
+                    onClick={() => addFileInputRef.current?.click()}
+                  >
+                    Add another file
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={isUploading}
+                    onClick={handleStartNewBill}
+                  >
+                    Start new bill
+                  </Button>
+                </div>
+                <input
+                  ref={addFileInputRef}
+                  type="file"
+                  className="hidden"
+                  accept=".csv,.xlsx,.xlsm,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                  onChange={handleAddAnotherFileUpload}
+                  disabled={isUploading}
+                />
+              </div>
+            )}
             {isUploading && (
               <p className="text-sm text-muted-foreground">Reading file...</p>
-            )}
-            {csvFileName && !isUploading && (
-              <p className="text-sm font-medium text-foreground">
-                File: {csvFileName} · {uploadedShipmentCount} from file
-                {manualShipmentCount > 0
-                  ? ` · ${manualShipmentCount} added manually`
-                  : ""}
-              </p>
             )}
           </div>
 
@@ -547,16 +756,12 @@ export function CourierInvoiceDashboard() {
 
       {showInvoiceDetails && (
         <ManualShipmentEntry
-          shipments={shipments}
+          manualShipments={manualShipments}
+          allShipments={shipments}
           billingFrom={billingFrom}
           billingTo={billingTo}
-          onShipmentsChange={setShipments}
-          onInvoiceStale={() => {
-            setInvoice(null);
-            setGenerateInfo(null);
-            setGenerateError(null);
-            setDownloadError(null);
-          }}
+          onManualShipmentsChange={setManualShipments}
+          onInvoiceStale={clearInvoiceState}
         />
       )}
 

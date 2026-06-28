@@ -46,25 +46,25 @@ const EMPTY_FORM: ManualShipmentInput = {
 };
 
 interface ManualShipmentEntryProps {
-  shipments: DelhiveryShipment[];
+  manualShipments: DelhiveryShipment[];
+  allShipments: DelhiveryShipment[];
   billingFrom: string;
   billingTo: string;
-  onShipmentsChange: (shipments: DelhiveryShipment[]) => void;
+  onManualShipmentsChange: (shipments: DelhiveryShipment[]) => void;
   onInvoiceStale: () => void;
 }
 
 export function ManualShipmentEntry({
-  shipments,
+  manualShipments,
+  allShipments,
   billingFrom,
   billingTo,
-  onShipmentsChange,
+  onManualShipmentsChange,
   onInvoiceStale,
 }: ManualShipmentEntryProps) {
   const [form, setForm] = useState<ManualShipmentInput>(EMPTY_FORM);
   const [formErrors, setFormErrors] = useState<string[]>([]);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-
-  const manualShipments = shipments.filter((shipment) => shipment.manualId);
 
   const updateField = (field: keyof ManualShipmentInput, value: string) => {
     setForm((current) => ({ ...current, [field]: value }));
@@ -81,7 +81,7 @@ export function ManualShipmentEntry({
       return;
     }
 
-    const duplicate = shipments.some(
+    const duplicate = allShipments.some(
       (shipment) =>
         shipment.waybillNumber === result.shipment!.waybillNumber &&
         shipment.pickupDate.toDateString() ===
@@ -96,7 +96,7 @@ export function ManualShipmentEntry({
       return;
     }
 
-    onShipmentsChange([...shipments, result.shipment]);
+    onManualShipmentsChange([...manualShipments, result.shipment]);
     onInvoiceStale();
     setForm(EMPTY_FORM);
     setFormErrors([]);
@@ -115,8 +115,8 @@ export function ManualShipmentEntry({
   };
 
   const handleRemove = (manualId: string) => {
-    onShipmentsChange(
-      shipments.filter((shipment) => shipment.manualId !== manualId),
+    onManualShipmentsChange(
+      manualShipments.filter((shipment) => shipment.manualId !== manualId),
     );
     onInvoiceStale();
     setSuccessMessage("Manual entry removed. Generate invoice again to refresh exports.");
