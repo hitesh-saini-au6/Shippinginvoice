@@ -32,6 +32,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ManualShipmentEntry } from "@/components/ManualShipmentEntry";
+import {
+  FreightRateSettingsCard,
+  useFreightRateSettings,
+} from "@/components/FreightRateSettingsCard";
 import { businessDetails, clients } from "@/config/invoiceSettings";
 import { loadPincodeMaster } from "@/config/pincodeMaster";
 import { dedupeShipments, tagShipmentsForFile } from "@/services/csv/mergeShipments";
@@ -133,6 +137,7 @@ export function CourierInvoiceDashboard() {
   const [isDownloadingExcel, setIsDownloadingExcel] = useState(false);
   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
   const [highlightPdfIssues, setHighlightPdfIssues] = useState(false);
+  const [freightRateSettings, setFreightRateSettings] = useFreightRateSettings();
   const addFileInputRef = useRef<HTMLInputElement>(null);
 
   const { shipments, duplicateShipmentCount } = useMemo(() => {
@@ -425,6 +430,7 @@ export function CourierInvoiceDashboard() {
         buyerPincode: values.buyerPincode,
         buyerState: values.buyerState,
         buyerStateCode: values.buyerStateCode,
+        rateSettings: freightRateSettings,
       },
     );
 
@@ -530,7 +536,7 @@ export function CourierInvoiceDashboard() {
         <CardHeader className="pb-3">
           <CardTitle className="text-base">How to use</CardTitle>
         </CardHeader>
-        <CardContent className="grid gap-2 text-sm text-muted-foreground md:grid-cols-7">
+        <CardContent className="grid gap-2 text-sm text-muted-foreground md:grid-cols-4 lg:grid-cols-8">
           <p>
             <strong className="text-foreground">1.</strong> Upload Delhivery
             billing file (.csv or .xlsx)
@@ -544,20 +550,24 @@ export function CourierInvoiceDashboard() {
             manually (optional)
           </p>
           <p>
-            <strong className="text-foreground">4.</strong> Check billing dates
+            <strong className="text-foreground">4.</strong> Set freight rates if
+            needed (saved in browser)
+          </p>
+          <p>
+            <strong className="text-foreground">5.</strong> Check billing dates
             (auto-filled from pickup dates)
           </p>
           <p>
-            <strong className="text-foreground">5.</strong> Click{" "}
+            <strong className="text-foreground">6.</strong> Click{" "}
             <strong className="text-foreground">Generate Invoice</strong>
           </p>
           <p>
-            <strong className="text-foreground">6.</strong> Download{" "}
+            <strong className="text-foreground">7.</strong> Download{" "}
             <strong className="text-foreground">Excel</strong> or{" "}
             <strong className="text-foreground">PDF</strong>
           </p>
           <p>
-            <strong className="text-foreground">7.</strong> Print PDF directly
+            <strong className="text-foreground">8.</strong> Print PDF directly
             for bills
           </p>
         </CardContent>
@@ -569,6 +579,12 @@ export function CourierInvoiceDashboard() {
           <AlertDescription>{masterError}</AlertDescription>
         </Alert>
       )}
+
+      <FreightRateSettingsCard
+        settings={freightRateSettings}
+        onSettingsChange={setFreightRateSettings}
+        onInvoiceStale={clearInvoiceState}
+      />
 
       <Card>
         <CardHeader>

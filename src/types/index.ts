@@ -94,6 +94,11 @@ export interface GeneratedInvoice {
   summary: InvoiceSummary;
 }
 
+export interface FreightRateSettings {
+  rajasthanRatePerKg: number;
+  defaultRatePerKg: number;
+}
+
 export interface InvoiceBuildOptions {
   invoiceNumber?: string;
   supplierName: string;
@@ -105,6 +110,7 @@ export interface InvoiceBuildOptions {
   buyerPincode: string;
   buyerState: string;
   buyerStateCode: string;
+  rateSettings: FreightRateSettings;
   invoiceDate?: Date;
 }
 

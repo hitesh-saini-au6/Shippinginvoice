@@ -1,9 +1,5 @@
-import {
-  DEFAULT_RATE_PER_KG,
-  RAJASTHAN_RATE_PER_KG,
-  RAJASTHAN_STATE_CODE,
-  ZONE_RATES_PER_KG,
-} from "@/config/rateCard";
+import { VALID_DELHIVERY_ZONES } from "@/config/rateCard";
+import type { FreightRateSettings } from "@/types";
 import { gramsToRoundedKg } from "@/utils/weight";
 
 export function normalizeZone(zone: string): string {
@@ -11,25 +7,30 @@ export function normalizeZone(zone: string): string {
   return cleaned;
 }
 
-export function getRatePerKg(zone: string, isRajasthan: boolean): number | null {
+export function getRatePerKg(
+  zone: string,
+  isRajasthan: boolean,
+  rateSettings: FreightRateSettings,
+): number | null {
   if (isRajasthan) {
-    return RAJASTHAN_RATE_PER_KG;
+    return rateSettings.rajasthanRatePerKg;
   }
 
   const normalized = normalizeZone(zone);
-  if (!normalized || !(normalized in ZONE_RATES_PER_KG)) {
+  if (!normalized || !VALID_DELHIVERY_ZONES.includes(normalized as (typeof VALID_DELHIVERY_ZONES)[number])) {
     return null;
   }
 
-  return DEFAULT_RATE_PER_KG;
+  return rateSettings.defaultRatePerKg;
 }
 
 export function calculateFreightAmount(
   weightGrams: number,
   zone: string,
   isRajasthan: boolean,
+  rateSettings: FreightRateSettings,
 ): number | null {
-  const rate = getRatePerKg(zone, isRajasthan);
+  const rate = getRatePerKg(zone, isRajasthan, rateSettings);
   if (rate == null) {
     return null;
   }
@@ -39,5 +40,5 @@ export function calculateFreightAmount(
 }
 
 export function isRajasthanState(stateCode: string): boolean {
-  return stateCode.toUpperCase() === RAJASTHAN_STATE_CODE;
+  return stateCode.toUpperCase() === "RJ";
 }

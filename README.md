@@ -33,7 +33,7 @@ Open [http://localhost:3000](http://localhost:3000).
 | File | Purpose |
 |------|---------|
 | `src/config/invoiceSettings.ts` | Business, client, bank, GST, payment terms |
-| `src/config/rateCard.ts` | Zone rates and Rajasthan rule |
+| `src/config/rateCard.ts` | Default freight rates (overridable in the UI) |
 | `public/data/pincode-master.json` | Pincode → district + state (replace without code changes) |
 
 ## Project Structure

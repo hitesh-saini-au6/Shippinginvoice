@@ -1,8 +1,8 @@
-import { ZONE_RATES_PER_KG } from "@/config/rateCard";
+import { VALID_DELHIVERY_ZONES } from "@/config/rateCard";
 import type { DelhiveryShipment } from "@/types";
 import { parseWeightGrams } from "@/utils/weight";
 
-export const MANUAL_SHIPMENT_ZONES = Object.keys(ZONE_RATES_PER_KG).sort();
+export const MANUAL_SHIPMENT_ZONES = [...VALID_DELHIVERY_ZONES];
 
 export interface ManualShipmentInput {
   waybillNumber: string;
@@ -58,7 +58,9 @@ export function buildManualShipment(
 
   if (!zone) {
     errors.push("Zone is required.");
-  } else if (!MANUAL_SHIPMENT_ZONES.includes(zone)) {
+  } else if (
+    !(VALID_DELHIVERY_ZONES as readonly string[]).includes(zone)
+  ) {
     errors.push(`Zone must be one of: ${MANUAL_SHIPMENT_ZONES.join(", ")}.`);
   }
 

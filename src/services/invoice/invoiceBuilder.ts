@@ -74,6 +74,7 @@ export function buildInvoice(
             shipment.chargedWeightGrams,
             shipment.zone,
             pincodeLookup.isRajasthan,
+            options.rateSettings,
           )
         : null;
 
