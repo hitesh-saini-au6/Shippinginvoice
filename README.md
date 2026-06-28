@@ -7,7 +7,7 @@ Internal web app to generate GST courier invoices from Delhivery billing CSV fil
 - Upload Delhivery billing CSV (header-based column detection)
 - Filter shipments by **Pickup Date** only
 - Destination lookup from bundled Pincode Master
-- Freight calculation using configurable rate card (Rajasthan override at ₹40/kg)
+- Freight calculation: **Rajasthan pincodes ₹40/kg**, all other destinations **₹70/kg**
 - Raw gram weight display with rounded-up kg used for billing
 - GST invoice layout (9% SGST + 9% CGST) matching your manual PDF template
 - Excel export — `Invoice_<FromDate>_to_<ToDate>.xlsx`

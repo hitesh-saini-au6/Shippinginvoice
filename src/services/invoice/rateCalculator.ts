@@ -1,4 +1,5 @@
 import {
+  DEFAULT_RATE_PER_KG,
   RAJASTHAN_RATE_PER_KG,
   RAJASTHAN_STATE_CODE,
   ZONE_RATES_PER_KG,
@@ -16,9 +17,11 @@ export function getRatePerKg(zone: string, isRajasthan: boolean): number | null 
   }
 
   const normalized = normalizeZone(zone);
-  const rate = ZONE_RATES_PER_KG[normalized];
+  if (!normalized || !(normalized in ZONE_RATES_PER_KG)) {
+    return null;
+  }
 
-  return rate ?? null;
+  return DEFAULT_RATE_PER_KG;
 }
 
 export function calculateFreightAmount(
